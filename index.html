@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>STOCKWATCH TERMINAL - 實體歷史數據版</title>
+    <title>STOCKWATCH TERMINAL - 深度歷史數據版</title>
     <style>
         /* --- 專業金融介面設計 --- */
         * { box-sizing: border-box; }
@@ -37,7 +37,7 @@
 
         .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; overflow-y: auto; }
         #chart-container { 
-            min-height: 450px; background: #0d1117; 
+            min-height: 480px; background: #0d1117; 
             border: 1px solid #30363d; border-radius: 12px; margin-bottom: 20px; 
         }
 
@@ -59,10 +59,10 @@
 
     <div class="header">
         <span class="logo">STOCKWATCH TERMINAL</span>
-        <span style="opacity: 0.5;">APP MODE | FINMIND REAL DATA</span>
+        <span style="opacity: 0.5;">APP MODE | 180-DAY DEPTH DATA</span>
         <div class="status" onclick="updateAll()">
             <div class="dot active" id="status-dot"></div>
-            <span id="update-time">點擊同步</span>
+            <span id="update-time">點擊同步全量數據</span>
         </div>
     </div>
 
@@ -82,11 +82,11 @@
                     <span class="price-display" id="price-val">---</span>
                     <span style="margin-left: 15px; color: #238636; font-weight: bold;" id="target-val">GOAL: 1100</span>
                 </div>
-                <p id="status-text" style="margin: 10px 0 0 0; opacity: 0.6; font-size: 14px;">正在讀取實體歷史數據...</p>
+                <p id="status-text" style="margin: 10px 0 0 0; opacity: 0.6; font-size: 14px;">正在讀取 180 天歷史數據...</p>
             </div>
 
             <div class="history-panel">
-                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #ff9800;">同步日誌 (Tick)</h4>
+                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #ff9800;">即時同步日誌</h4>
                 <table class="history-table">
                     <thead><tr><th>時間</th><th>價格</th></tr></thead>
                     <tbody id="history-body"></tbody>
@@ -106,22 +106,26 @@
         let currentTarget = 1100;
         let tickLog = [];
 
-        // 1. 初始化圖表
+        // 1. 初始化圖表 (優化時間軸顯示更多數據)
         const chart = LightweightCharts.createChart(container, {
-            width: container.clientWidth, height: 450,
+            width: container.clientWidth, height: 480,
             layout: { backgroundColor: '#0d1117', textColor: '#d1d4dc' },
             grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
-            timeScale: { timeVisible: true }
+            timeScale: { 
+                timeVisible: true,
+                rightOffset: 12,
+                barSpacing: 10 // 調整間距讓資料更密集
+            }
         });
         const candlestickSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350' });
 
-        // 🌟 2. 核心：抓取 FinMind 實體歷史數據
+        // 🌟 2. 深度歷史數據：改為抓取 180 天
         async function loadRealHistory(symbol) {
             try {
-                // 設定抓取過去一個月的資料
                 const endDate = new Date().toISOString().split('T')[0];
                 const startDate = new Date();
-                startDate.setMonth(startDate.getMonth() - 1);
+                // 🚀 修改點：從 1 個月改為 6 個月 (180天)
+                startDate.setMonth(startDate.getMonth() - 6);
                 const startDateStr = startDate.toISOString().split('T')[0];
 
                 const finMindUrl = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${symbol}&start_date=${startDateStr}&end_date=${endDate}`;
@@ -138,11 +142,13 @@
                         close: d.close
                     }));
                     candlestickSeries.setData(formattedData);
-                    document.getElementById('status-text').innerText = "✅ 歷史數據載入成功";
+                    // 讓圖表自動縮放以顯示所有歷史資料
+                    chart.timeScale().fitContent();
+                    document.getElementById('status-text').innerText = "✅ 180 天歷史大數據載入成功";
                 }
             } catch (err) {
                 console.error("FinMind Error:", err);
-                document.getElementById('status-text').innerText = "⚠️ 歷史數據載入失敗，切換即時監控";
+                document.getElementById('status-text').innerText = "⚠️ 數據載入超時，請檢查連線";
             }
         }
 
@@ -162,23 +168,24 @@
                 if (stock) {
                     const price = parseFloat(stock.ClosingPrice);
                     document.getElementById('price-val').innerText = price.toFixed(2);
-                    document.getElementById('update-time').innerText = "同步: " + new Date().toLocaleTimeString();
+                    document.getElementById('update-time').innerText = "最後更新: " + new Date().toLocaleTimeString();
                     document.getElementById('status-dot').style.background = "#238636";
 
                     addToTickLog(price);
 
                     candlestickSeries.update({
-                        time: new Date().toISOString().split('T')[0], // 更新當日 K 線
+                        time: new Date().toISOString().split('T')[0],
                         open: parseFloat(stock.OpeningPrice) || price,
                         high: parseFloat(stock.HighestPrice) || price,
                         low: parseFloat(stock.LowestPrice) || price,
                         close: price
                     });
 
+                    const panel = document.getElementById('alert-panel');
                     if (price >= currentTarget) {
-                        document.getElementById('alert-panel').classList.add('triggered');
+                        panel.classList.add('triggered');
                     } else {
-                        document.getElementById('alert-panel').classList.remove('triggered');
+                        panel.classList.remove('triggered');
                     }
                 }
             } catch (error) {
@@ -208,8 +215,8 @@
 
         // 初始化
         updateAll();
-        setInterval(fetchRealtimeData, 20000); // 即時報價每 20 秒更新
-        window.onresize = () => chart.resize(container.clientWidth, 400);
+        setInterval(fetchRealtimeData, 30000); 
+        window.onresize = () => chart.resize(container.clientWidth, 480);
     </script>
 </body>
 </html>
