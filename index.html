@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>STOCKWATCH TERMINAL - 永久存檔版</title>
+    <title>STOCKWATCH TERMINAL - 雲端直連版</title>
     <style>
         /* --- 專業金融介面設計 --- */
         * { box-sizing: border-box; }
@@ -25,6 +25,7 @@
         .status { margin-left: auto; display: flex; align-items: center; cursor: pointer; }
         .header .dot { width: 8px; height: 8px; background: #8b949e; border-radius: 50%; margin-right: 8px; }
 
+        /* 左側：搜尋與動態清單 */
         .left-panel {
             width: 280px; background-color: #161b22;
             border-right: 1px solid #30363d; padding: 50px 10px 10px 10px;
@@ -45,23 +46,16 @@
         .stock-item:hover { background: #21262d; }
         .stock-item.active { background: #1c2128; border: 1px solid #58a6ff; }
 
+        /* 右側核心區 */
         .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; overflow-y: auto; }
-        #chart-wrapper { position: relative; min-height: 480px; margin-bottom: 20px; }
-        #chart-container { height: 100%; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; }
+        #chart-container { min-height: 480px; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; margin-bottom: 20px; }
 
-        .dashboard { display: grid; grid-template-columns: 1fr 320px; gap: 20px; }
+        .dashboard { display: grid; grid-template-columns: 1fr 300px; gap: 20px; }
         .alert-panel { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 25px; }
         .alert-panel.triggered { background: #2a1414; border: 1px solid #f85149; animation: pulse-red 1.5s infinite; }
         .price-display { font-size: 56px; font-weight: bold; color: white; letter-spacing: -2px; }
 
-        /* 📜 歷史紀錄面板優化 */
-        .history-panel { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 15px; position: relative; }
-        .clear-btn { 
-            position: absolute; right: 15px; top: 15px; 
-            background: #30363d; color: #8b949e; border: none; padding: 2px 8px; 
-            border-radius: 4px; cursor: pointer; font-size: 10px;
-        }
-        .clear-btn:hover { background: #f85149; color: white; }
+        .history-panel { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 15px; }
         
         @keyframes pulse-red { 0% { box-shadow: 0 0 0px #f85149; } 50% { box-shadow: 0 0 20px rgba(248,81,73,0.2); } 100% { box-shadow: 0 0 0px #f85149; } }
     </style>
@@ -86,21 +80,17 @@
 
     <div class="right-panel">
         <h2 id="current-title" style="margin: 0 0 10px 0; color: white; font-weight: 500;">請選擇股票</h2>
-        <div id="chart-wrapper">
-            <div id="chart-container"></div>
-        </div>
+        <div id="chart-container"></div>
         <div class="dashboard">
             <div class="alert-panel" id="alert-panel">
                 <div style="display: flex; align-items: baseline;">
                     <span class="price-display" id="price-val">---</span>
                     <span style="margin-left: 15px; color: #238636; font-weight: bold;" id="target-val">GOAL: --</span>
                 </div>
-                <p id="status-text" style="margin: 10px 0 0 0; opacity: 0.6; font-size: 14px;">等待選擇標的。</p>
+                <p id="status-text" style="margin: 10px 0 0 0; opacity: 0.6; font-size: 14px;">等待搜尋。</p>
             </div>
-            
             <div class="history-panel">
-                <button class="clear-btn" onclick="clearTickLog()">清除紀錄</button>
-                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #ff9800;">永久同步紀錄 (硬碟存檔)</h4>
+                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #ff9800;">當次連線紀錄</h4>
                 <table style="width:100%; font-size:12px; border-collapse: collapse;">
                     <tbody id="history-body"></tbody>
                 </table>
@@ -120,7 +110,7 @@
         let allStocks = []; 
         let currentSymbol = '';
         let currentTarget = 0;
-        let tickLog = [];
+        let tickLog = []; // 僅存放在記憶體，關閉後清空
 
         const container = document.getElementById('chart-container');
         const chart = LightweightCharts.createChart(container, {
@@ -152,12 +142,12 @@
             try {
                 const response = await fetch(twseUrl);
                 allStocks = await response.json();
-                updateTime.innerText = `✅ 系統就緒 (${allStocks.length} 檔)`;
+                updateTime.innerText = `✅ 雲端連線成功 (${allStocks.length} 檔)`;
                 dot.style.background = "#238636";
                 renderStockList(allStocks.slice(0, 50));
             } catch (err) {
                 allStocks = fallbackStocks;
-                updateTime.innerText = "⚠️ 官方維護中，啟動備援";
+                updateTime.innerText = "⚠️ 官方維護中，使用離線名單";
                 dot.style.background = "#f85149";
                 renderStockList(allStocks);
             }
@@ -178,38 +168,9 @@
             renderStockList(filtered.slice(0, 50));
         });
 
-        // 🌟 核心：從硬碟載入 Tick Log
-        function loadSavedTickLog(symbol) {
-            const saved = localStorage.getItem('tickLog_' + symbol);
-            tickLog = saved ? JSON.parse(saved) : [];
-            renderTickLog();
-        }
-
-        // 🌟 核心：存入硬碟
-        function saveTickLog(symbol, price) {
-            const now = new Date().toLocaleTimeString();
-            tickLog.unshift({ time: now, price: price });
-            if (tickLog.length > 30) tickLog.pop(); // 增加存檔數量到 30 筆
-            
-            localStorage.setItem('tickLog_' + symbol, JSON.stringify(tickLog));
-            renderTickLog();
-        }
-
-        function renderTickLog() {
-            document.getElementById('history-body').innerHTML = tickLog.map(h => `
-                <tr><td style="padding:5px 0">${h.time}</td><td style="color:#58a6ff;font-weight:bold">${h.price.toFixed(2)}</td></tr>
-            `).join('');
-        }
-
-        function clearTickLog() {
-            if (confirm('確定要清除這檔股票的歷史紀錄嗎？')) {
-                localStorage.removeItem('tickLog_' + currentSymbol);
-                tickLog = [];
-                renderTickLog();
-            }
-        }
-
         async function loadRealHistory(symbol) {
+            const statusText = document.getElementById('status-text');
+            statusText.innerText = `⏳ 正在從 FinMind 雲端抓取歷史 K 線...`;
             const startDate = new Date();
             startDate.setMonth(startDate.getMonth() - 8);
             const finMindUrl = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${symbol}&start_date=${startDate.toISOString().split('T')[0]}`;
@@ -223,22 +184,20 @@
                     ma20Series.setData(calculateSMA(formatted, 20));
                     ma60Series.setData(calculateSMA(formatted, 60));
                     chart.timeScale().fitContent();
+                    statusText.innerText = "✅ 歷史數據同步完成";
                 }
-            } catch (e) { }
+            } catch (e) { statusText.innerText = "❌ 雲端歷史數據抓取失敗"; }
         }
 
         async function selectStock(code, name) {
             currentSymbol = code;
             document.getElementById('current-title').innerText = `${code} ${name}`;
-            
-            // 讀取該股票的目標價存檔 (如果有)
-            const savedTarget = localStorage.getItem('target_' + code);
-            const inputTarget = prompt(`請設定 ${name} 的目標價:`, savedTarget || "0");
+            const inputTarget = prompt(`請設定 ${name} 的目標價:`, "0");
             currentTarget = parseFloat(inputTarget) || 0;
-            localStorage.setItem('target_' + code, currentTarget); // 存檔目標價
             document.getElementById('target-val').innerText = `GOAL: ${currentTarget}`;
             
-            loadSavedTickLog(code); // 🚀 載入歷史紀錄
+            tickLog = []; // 切換時清空記憶體紀錄
+            document.getElementById('history-body').innerHTML = "";
             await loadRealHistory(code);
             await fetchRealtimeData();
         }
@@ -253,7 +212,11 @@
                     const price = parseFloat(stock.ClosingPrice);
                     document.getElementById('price-val').innerText = price.toFixed(2);
                     
-                    saveTickLog(currentSymbol, price); // 🚀 同步並存檔
+                    // 僅更新記憶體中的紀錄
+                    const now = new Date().toLocaleTimeString();
+                    tickLog.unshift({ time: now, price: price });
+                    if (tickLog.length > 10) tickLog.pop();
+                    document.getElementById('history-body').innerHTML = tickLog.map(h => `<tr><td style="padding:5px 0">${h.time}</td><td style="color:#58a6ff;font-weight:bold">${h.price.toFixed(2)}</td></tr>`).join('');
 
                     if (price >= currentTarget && currentTarget > 0) {
                         document.getElementById('alert-panel').classList.add('triggered');
@@ -265,7 +228,7 @@
         }
 
         initStockDatabase();
-        setInterval(fetchRealtimeData, 60000); // 延長為 1 分鐘同步一次，節省流量
+        setInterval(fetchRealtimeData, 30000);
         window.onresize = () => chart.resize(container.clientWidth, 480);
     </script>
 </body>
