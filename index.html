@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>STOCKWATCH TERMINAL - 官方直連強韌版</title>
+    <title>STOCKWATCH TERMINAL - 官方直連版</title>
     <style>
         /* --- 1. 專業金融介面：深色高對比設計 --- */
         * { box-sizing: border-box; }
@@ -96,4 +96,105 @@
         </div>
     </div>
 
-    <script src="
+    <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
+
+    <script>
+        const twseUrl = "https://openapi.twse.com.tw/v1/stock/ALL";
+
+        const container = document.getElementById('chart-container');
+        const priceVal = document.getElementById('price-val');
+        const targetVal = document.getElementById('target-val');
+        const alertPanel = document.getElementById('alert-panel');
+        const statusText = document.getElementById('status-text');
+        const updateTime = document.getElementById('update-time');
+        const dot = document.getElementById('status-dot');
+
+        let currentSymbol = '2330';
+        let currentTarget = 1100;
+
+        // 1. 初始化圖表
+        const chart = LightweightCharts.createChart(container, {
+            width: container.clientWidth, height: 450,
+            layout: { backgroundColor: '#0d1117', textColor: '#d1d4dc' },
+            grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
+            timeScale: { borderColor: '#30363d' },
+            rightPriceScale: { borderColor: '#30363d' }
+        });
+        const candlestickSeries = chart.addCandlestickSeries({
+            upColor: '#26a69a', downColor: '#ef5350',
+            wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+        });
+
+        // 🌟 2. 核心功能：直連證交所 (強化偵錯)
+        async function fetchMarketData() {
+            try {
+                statusText.innerHTML = "⏳ 正在請求官方即時數據...";
+                dot.style.background = "#ff9800";
+
+                const response = await fetch(twseUrl);
+                
+                if (!response.ok) {
+                    throw new Error(`伺服器代碼: ${response.status} (可能是維護中)`);
+                }
+                
+                const allData = await response.json();
+                
+                // 凌晨檢查：如果伺服器回傳空陣列
+                if (!allData || allData.length === 0) {
+                    throw new Error("伺服器目前未回傳任何資料 (凌晨維護時段)");
+                }
+
+                const stock = allData.find(s => s.Code === currentSymbol);
+
+                if (stock) {
+                    const price = parseFloat(stock.ClosingPrice);
+                    priceVal.innerText = price.toFixed(2);
+                    targetVal.innerText = `GOAL: ${currentTarget}`;
+                    updateTime.innerText = "官方直連: " + new Date().toLocaleTimeString();
+                    dot.style.background = "#238636"; 
+                    statusText.innerText = "✅ 官方數據同步中 (直連模式)";
+
+                    candlestickSeries.update({
+                        time: Math.floor(Date.now() / 1000),
+                        open: parseFloat(stock.OpeningPrice) || price,
+                        high: parseFloat(stock.HighestPrice) || price,
+                        low: parseFloat(stock.LowestPrice) || price,
+                        close: price
+                    });
+
+                    if (price >= currentTarget) {
+                        alertPanel.classList.add('triggered');
+                        statusText.innerHTML = `⚠️ <b>達標！</b> 報價 ${price} 已觸發警報。`;
+                    } else {
+                        alertPanel.classList.remove('triggered');
+                        statusText.innerText = `監控中... 距離目標還差 ${(currentTarget - price).toFixed(2)} 元`;
+                    }
+                } else {
+                    throw new Error(`找不到股票代碼 ${currentSymbol} 的今日數據`);
+                }
+            } catch (error) {
+                console.error("連線錯誤:", error);
+                dot.style.background = "#f85149";
+                statusText.innerHTML = `❌ <span style='color:#f85149'>連線狀態: ${error.message}</span><br><small>註：現在是凌晨維護時間，請等早晨開盤再試。</small>`;
+            }
+        }
+
+        document.querySelectorAll('.stock-item').forEach(item => {
+            item.addEventListener('click', function() {
+                currentSymbol = this.getAttribute('data-symbol');
+                currentTarget = parseFloat(this.getAttribute('data-target'));
+                document.getElementById('current-title').innerText = this.innerText;
+                document.querySelectorAll('.stock-item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+                candlestickSeries.setData([]); 
+                fetchMarketData();
+            });
+        });
+
+        setInterval(fetchMarketData, 15000);
+        fetchMarketData();
+
+        window.onresize = () => chart.resize(container.clientWidth, 450);
+    </script>
+</body>
+</html>
