@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>STOCKWATCH TERMINAL - 官方直連版</title>
+    <title>STOCKWATCH TERMINAL - 官方直連強韌版</title>
     <style>
         /* --- 1. 專業金融介面：深色高對比設計 --- */
         * { box-sizing: border-box; }
@@ -21,7 +21,7 @@
         }
         .header .logo { color: #ff9800; font-weight: bold; letter-spacing: 2px; margin-right: 20px; }
         .header .status { margin-left: auto; display: flex; align-items: center; }
-        .header .dot { width: 8px; height: 8px; background: #238636; border-radius: 50%; margin-right: 8px; }
+        .header .dot { width: 8px; height: 8px; background: #8b949e; border-radius: 50%; margin-right: 8px; }
         .header .dot.active { animation: blink 1s infinite; }
 
         /* 左側自選股 */
@@ -54,7 +54,6 @@
             background: #161b22; border: 1px solid #30363d;
             border-radius: 12px; padding: 25px; transition: 0.4s ease;
         }
-        /* 觸發警報時的視覺 */
         .alert-panel.triggered {
             background: #2a1414; border: 1px solid #f85149;
             animation: pulse-red 1.5s infinite;
@@ -74,7 +73,7 @@
         <span style="opacity: 0.5;">APP MODE | TWSE DIRECT CONNECT</span>
         <div class="status">
             <div class="dot active" id="status-dot"></div>
-            <span id="update-time">CONNECTING...</span>
+            <span id="update-time">等待連線...</span>
         </div>
     </div>
 
@@ -93,102 +92,8 @@
                 <span class="price-display" id="price-val">---</span>
                 <span class="target-tag" id="target-val">GOAL: 1100</span>
             </div>
-            <p id="status-text" style="margin: 0; opacity: 0.6; font-size: 14px;">正在同步官方即時數據...</p>
+            <p id="status-text" style="margin: 0; opacity: 0.6; font-size: 14px;">初始化系統...</p>
         </div>
     </div>
 
-    <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
-
-    <script>
-        // 🌟 核心 API：直連證交所 OpenAPI
-        const twseUrl = "https://openapi.twse.com.tw/v1/stock/ALL";
-
-        const container = document.getElementById('chart-container');
-        const priceVal = document.getElementById('price-val');
-        const targetVal = document.getElementById('target-val');
-        const alertPanel = document.getElementById('alert-panel');
-        const statusText = document.getElementById('status-text');
-        const updateTime = document.getElementById('update-time');
-
-        let currentSymbol = '2330';
-        let currentTarget = 1100;
-
-        // 1. 初始化圖表
-        const chart = LightweightCharts.createChart(container, {
-            width: container.clientWidth, height: 450,
-            layout: { backgroundColor: '#0d1117', textColor: '#d1d4dc' },
-            grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
-            timeScale: { borderColor: '#30363d' },
-            rightPriceScale: { borderColor: '#30363d' }
-        });
-        const candlestickSeries = chart.addCandlestickSeries({
-            upColor: '#26a69a', downColor: '#ef5350',
-            wickUpColor: '#26a69a', wickDownColor: '#ef5350',
-        });
-
-        // 🌟 2. 核心功能：直連證交所
-        async function fetchMarketData() {
-            try {
-                // 🚀 App 模式下直接 fetch 官方網址，速度最快
-                const response = await fetch(twseUrl);
-                if (!response.ok) throw new Error("API 回應異常");
-                
-                const allData = await response.json();
-                const stock = allData.find(s => s.Code === currentSymbol);
-
-                if (stock) {
-                    const price = parseFloat(stock.ClosingPrice);
-                    const open = parseFloat(stock.OpeningPrice) || price;
-                    const high = parseFloat(stock.HighestPrice) || price;
-                    const low = parseFloat(stock.LowestPrice) || price;
-
-                    // 更新文字顯示
-                    priceVal.innerText = price.toFixed(2);
-                    targetVal.innerText = `GOAL: ${currentTarget}`;
-                    updateTime.innerText = "LIVE: " + new Date().toLocaleTimeString();
-
-                    // 更新圖表最後一根
-                    candlestickSeries.update({
-                        time: Math.floor(Date.now() / 1000),
-                        open: open, high: high, low: low, close: price
-                    });
-
-                    // 警報邏輯
-                    if (price >= currentTarget) {
-                        alertPanel.classList.add('triggered');
-                        statusText.innerHTML = `⚠️ <b>警報觸發：</b> 目前報價 ${price} 已達標 ${currentTarget}！`;
-                    } else {
-                        alertPanel.classList.remove('triggered');
-                        statusText.innerText = `監控中... 距離目標價格還差 ${(currentTarget - price).toFixed(2)} 元`;
-                    }
-                }
-            } catch (error) {
-                console.error("Fetch Error:", error);
-                statusText.innerText = "連線異常，正在重新尝试...";
-            }
-        }
-
-        // 3. 切換股票
-        document.querySelectorAll('.stock-item').forEach(item => {
-            item.addEventListener('click', function() {
-                currentSymbol = this.getAttribute('data-symbol');
-                currentTarget = parseFloat(this.getAttribute('data-target'));
-                document.getElementById('current-title').innerText = this.innerText;
-                
-                document.querySelectorAll('.stock-item').forEach(i => i.classList.remove('active'));
-                this.classList.add('active');
-                
-                candlestickSeries.setData([]); // 切換時清空歷史
-                fetchMarketData();
-            });
-        });
-
-        // 設定更新頻率 (每 10 秒抓取一次官方最新報價)
-        setInterval(fetchMarketData, 10000);
-        fetchMarketData();
-
-        // 視窗縮放適應
-        window.onresize = () => chart.resize(container.clientWidth, 450);
-    </script>
-</body>
-</html>
+    <script src="
