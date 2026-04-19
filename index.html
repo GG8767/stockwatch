@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>STOCKWATCH - 極限穩定版</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        body { background-color: #0d1117; color: #d1d4dc; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* 頂部導覽列 */
+        .header {
+            position: absolute; top: 0; width: 100%; height: 40px;
+            background: #161b22; border-bottom: 1px solid #30363d;
+            display: flex; align-items: center; padding: 0 20px; font-size: 12px; z-index: 100;
+        }
+        .header .logo { color: #ff9800; font-weight: bold; margin-right: 20px; }
+        .header .sync { margin-left: auto; display: flex; align-items: center; cursor: pointer; }
+        .header .dot { width: 8px; height: 8px; background: #8b949e; border-radius: 50%; margin-right: 8px; }
+
+        /* 左側清單 */
+        .left-panel { width: 260px; background-color: #161b22; border-right: 1px solid #30363d; padding: 50px 10px 10px 10px; }
+        .stock-item {
+            cursor: pointer; padding: 15px; border-radius: 8px; margin-bottom: 8px; 
+            background: #0d1117; display: flex; justify-content: space-between; border-left: 4px solid transparent;
+        }
+        .stock-item.active { background: #1c2128; border-left: 4px solid #58a6ff; }
+
+        /* 右側區域 */
+        .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; }
+        #chart-container { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; margin-bottom: 20px; }
+
+        /* 警報面板 */
+        .alert-panel { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; }
+        .alert-panel.triggered { background: #2a1414; border: 1px solid #f85149; animation: pulse 2s infinite; }
+        .price-val { font-size: 48px; font-weight: bold; color: white; margin-right: 15px; }
+        .target-tag { background: #238636; color: white; padding: 4px 12px; border-radius: 4px; font-weight: bold; }
+
+        @keyframes pulse { 0% { box-shadow: 0 0 0px #f85149; } 50% { box-shadow: 0 0 15px rgba(248,81,73,0.4); } 100% { box-shadow: 0 0 0px #f85149; } }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <span class="logo">STOCKWATCH TERMINAL</span>
+        <div class="sync" onclick="fetchMarketData()">
+            <div class="dot" id="status-dot"></div>
+            <span id="update-time">點擊手動重新連線</span>
+        </div>
+    </div>
+
+    <div class="left-panel" id="watchlist">
+        <div class="stock-item active" data-symbol="2330" data-target="1100"><span>2330 台積電</span></div>
+        <div class="stock-item" data-symbol="2409" data-target="28.0"><span>2409 友達</span></div>
+        <div class="stock-item" data-symbol="2317" data-target="230"><span>2317 鴻海</span></div>
+    </div>
+
+    <div class="right-panel">
+        <h2 id="current-title" style="margin: 0 0 15px 0; color: white;">2330 台積電</h2>
+        <div id="chart-container"></div>
+        <div class="alert-panel" id="alert-panel">
+            <div style="display: flex; align-items: baseline; margin-bottom: 8px;">
+                <span class="price-val" id="price-val">---</span>
+                <span class="target-tag" id="target-val">GOAL: 1100</span>
+            </div>
+            <p id="status-text" style="margin: 0; opacity: 0.7; font-size: 14px;">等待數據同步中...</p>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
+
+    <script>
+        const twseUrl = "https://openapi.twse.com.tw/v1/stock/ALL";
+        // 🌟 備援 Proxy 清單
+        const proxies = [
+            "https://api.allorigins.win/get?url=",
+            "https://api.codetabs.com/v1/proxy?quest="
+        ];
+        let currentProxyIndex = 0;
+
+        const container = document.getElementById('chart-container');
+        const candlestickSeries = LightweightCharts.createChart(container, {
+            width: container.clientWidth, height: 450,
+            layout: { backgroundColor: '#0d1117', textColor: '#d1d4dc' },
+            grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
+        }).addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350' });
+
+        // 🌟 每檔股票專屬的底圖資料
+        const stockBasics = {
+            '2330': [{ time: '2026-04-20', open: 1045, high: 1075, low: 1040, close: 1069 }],
+            '2409': [{ time: '2026-04-20', open: 27.5, high: 28.3, low: 27.2, close: 27.8 }],
+            '2317': [{ time: '2026-04-20', open: 218, high: 226, low: 215, close: 221.5 }]
+        };
+
+        let currentSymbol = '2330';
+        let currentTarget = 1100;
+
+        function initChart(symbol) {
+            candlestickSeries.setData(stockBasics[symbol] || stockBasics['2330']);
+        }
+
+        async function fetchMarketData() {
+            const statusText = document.getElementById('status-text');
+            const dot = document.getElementById('status-dot');
+            statusText.innerText = "⏳ 正在跨越防火牆抓取數據...";
+            dot.style.background = "#ff9800";
+
+            try {
+                // 嘗試當前 Proxy
+                const target = encodeURIComponent(twseUrl + "?cache=" + Date.now());
+                const response = await fetch(proxies[currentProxyIndex] + target);
+                const data = await response.json();
+                
+                // 處理不同 Proxy 的回傳格式
+                const allData = data.contents ? JSON.parse(data.contents) : data;
+                const stock = allData.find(s => s.Code === currentSymbol);
+
+                if (stock) {
+                    const price = parseFloat(stock.ClosingPrice);
+                    document.getElementById('price-val').innerText = price.toFixed(2);
+                    document.getElementById('update-time').innerText = "最後同步: " + new Date().toLocaleTimeString();
+                    dot.style.background = "#238636";
+
+                    candlestickSeries.update({
+                        time: stockBasics[currentSymbol][0].time,
+                        open: parseFloat(stock.OpeningPrice) || price,
+                        high: parseFloat(stock.HighestPrice) || price,
+                        low: parseFloat(stock.LowestPrice) || price,
+                        close: price
+                    });
+
+                    const panel = document.getElementById('alert-panel');
+                    if (price >= currentTarget) {
+                        panel.classList.add('triggered');
+                        statusText.innerHTML = "⚠️ <b>達標！</b> 官方價已觸發警報。";
+                    } else {
+                        panel.classList.remove('triggered');
+                        statusText.innerText = `監控中... 距離目標還差 ${(currentTarget - price).toFixed(2)} 元`;
+                    }
+                }
+            } catch (err) {
+                console.error("連線失敗，切換下一個 Proxy");
+                currentProxyIndex = (currentProxyIndex + 1) % proxies.length;
+                statusText.innerHTML = "<span style='color:#f85149'>⚠️ 連線不穩，已切換線路。請稍候或手動點擊右上方重連。</span>";
+                dot.style.background = "#f85149";
+            }
+        }
+
+        document.querySelectorAll('.stock-item').forEach(item => {
+            item.addEventListener('click', function() {
+                currentSymbol = this.getAttribute('data-symbol');
+                currentTarget = parseFloat(this.getAttribute('data-target'));
+                document.getElementById('current-title').innerText = this.innerText;
+                document.getElementById('target-val').innerText = "GOAL: " + currentTarget;
+                document.querySelectorAll('.stock-item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+                initChart(currentSymbol);
+                fetchMarketData();
+            });
+        });
+
+        initChart(currentSymbol);
+        fetchMarketData();
+        setInterval(fetchMarketData, 20000); // 延長到 20 秒抓一次，減少被 Proxy 封鎖的機率
+    </script>
+</body>
+</html>
