@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>STOCKWATCH TERMINAL - 強化備援版</title>
+    <title>STOCKWATCH TERMINAL - 終極韌性版</title>
     <style>
         /* --- 專業金融介面設計 --- */
         * { box-sizing: border-box; }
@@ -25,6 +25,7 @@
         .status { margin-left: auto; display: flex; align-items: center; cursor: pointer; }
         .header .dot { width: 8px; height: 8px; background: #8b949e; border-radius: 50%; margin-right: 8px; }
 
+        /* 左側：搜尋與動態清單 */
         .left-panel {
             width: 280px; background-color: #161b22;
             border-right: 1px solid #30363d; padding: 50px 10px 10px 10px;
@@ -45,8 +46,17 @@
         .stock-item:hover { background: #21262d; }
         .stock-item.active { background: #1c2128; border: 1px solid #58a6ff; }
 
+        /* 右側核心區 */
         .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; overflow-y: auto; }
-        #chart-container { min-height: 480px; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; margin-bottom: 20px; }
+        
+        /* 🌟 圖表容器增加相對定位，方便顯示 Loading 文字 */
+        #chart-wrapper { position: relative; min-height: 480px; margin-bottom: 20px; }
+        #chart-container { height: 100%; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; }
+        #chart-loading {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.7); padding: 15px 30px; border-radius: 8px;
+            display: none; z-index: 10; border: 1px solid #58a6ff;
+        }
 
         .dashboard { display: grid; grid-template-columns: 1fr 300px; gap: 20px; }
         .alert-panel { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 25px; }
@@ -66,26 +76,29 @@
             <span class="ma-5">● MA5</span><span class="ma-20">● MA20</span><span class="ma-60">● MA60</span>
         </div>
         <div class="status" onclick="initStockDatabase()">
-            <div class="dot active" id="status-dot"></div>
-            <span id="update-time">等待連線...</span>
+            <div class="dot" id="status-dot"></div>
+            <span id="update-time">初始化中...</span>
         </div>
     </div>
 
     <div class="left-panel">
-        <input type="text" class="search-box" id="search-input" placeholder="搜尋代碼或名稱...">
+        <input type="text" class="search-box" id="search-input" placeholder="搜尋代碼或名稱 (如: 2409)...">
         <div id="stock-list"></div>
     </div>
 
     <div class="right-panel">
         <h2 id="current-title" style="margin: 0 0 10px 0; color: white; font-weight: 500;">請選擇股票</h2>
-        <div id="chart-container"></div>
+        <div id="chart-wrapper">
+            <div id="chart-container"></div>
+            <div id="chart-loading">⌛ 數據讀取中...</div>
+        </div>
         <div class="dashboard">
             <div class="alert-panel" id="alert-panel">
                 <div style="display: flex; align-items: baseline;">
                     <span class="price-display" id="price-val">---</span>
                     <span style="margin-left: 15px; color: #238636; font-weight: bold;" id="target-val">GOAL: --</span>
                 </div>
-                <p id="status-text" style="margin: 10px 0 0 0; opacity: 0.6; font-size: 14px;">初始化完成。</p>
+                <p id="status-text" style="margin: 10px 0 0 0; opacity: 0.6; font-size: 14px;">等待選擇標的。</p>
             </div>
             <div class="history-panel">
                 <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #ff9800;">即時 Tick 紀錄</h4>
@@ -100,13 +113,9 @@
 
     <script>
         const twseUrl = "https://openapi.twse.com.tw/v1/stock/ALL";
-        // 🌟 離線保險：如果官方 API 睡著了，預載這些股票
         const fallbackStocks = [
-            {Code: "2330", Name: "台積電"},
-            {Code: "2409", Name: "友達"},
-            {Code: "2317", Name: "鴻海"},
-            {Code: "2454", Name: "聯發科"},
-            {Code: "2603", Name: "長榮"}
+            {Code: "2330", Name: "台積電"}, {Code: "2409", Name: "友達"},
+            {Code: "2317", Name: "鴻海"}, {Code: "2454", Name: "聯發科"}, {Code: "2603", Name: "長榮"}
         ];
 
         let allStocks = []; 
@@ -115,6 +124,8 @@
         let tickLog = [];
 
         const container = document.getElementById('chart-container');
+        const loadingEl = document.getElementById('chart-loading');
+
         const chart = LightweightCharts.createChart(container, {
             width: container.clientWidth, height: 480,
             layout: { backgroundColor: '#0d1117', textColor: '#d1d4dc' },
@@ -142,19 +153,18 @@
             const dot = document.getElementById('status-dot');
             const updateTime = document.getElementById('update-time');
             dot.style.background = "#ff9800";
-            updateTime.innerText = "正在嘗試與證交所連線...";
+            updateTime.innerText = "正在連線證交所...";
 
             try {
                 const response = await fetch(twseUrl);
                 if (!response.ok) throw new Error();
                 allStocks = await response.json();
-                updateTime.innerText = `✅ 已載入 ${allStocks.length} 檔全台股`;
+                updateTime.innerText = `✅ 系統就緒 (${allStocks.length} 檔)`;
                 dot.style.background = "#238636";
                 renderStockList(allStocks.slice(0, 50));
             } catch (err) {
-                // 🚀 觸發保險機制
                 allStocks = fallbackStocks;
-                updateTime.innerText = "⚠️ 官方維護中，啟動離線備援";
+                updateTime.innerText = "⚠️ 官方維護中，啟動備援";
                 dot.style.background = "#f85149";
                 renderStockList(allStocks);
             }
@@ -176,7 +186,10 @@
         });
 
         async function loadRealHistory(symbol) {
-            document.getElementById('status-text').innerText = "⏳ 正在讀取 FinMind 深度數據...";
+            loadingEl.style.display = 'block'; // 顯示 Loading
+            const statusText = document.getElementById('status-text');
+            statusText.innerText = `⏳ 正在搬運 ${symbol} 的半年數據...`;
+
             const startDate = new Date();
             startDate.setMonth(startDate.getMonth() - 8);
             const finMindUrl = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${symbol}&start_date=${startDate.toISOString().split('T')[0]}`;
@@ -191,9 +204,15 @@
                     ma20Series.setData(calculateSMA(formatted, 20));
                     ma60Series.setData(calculateSMA(formatted, 60));
                     chart.timeScale().fitContent();
-                    document.getElementById('status-text').innerText = "✅ 指標計算完成";
+                    statusText.innerText = "✅ 歷史走勢載入成功";
+                    loadingEl.style.display = 'none';
+                } else {
+                    throw new Error("Empty data");
                 }
-            } catch (e) { document.getElementById('status-text').innerText = "⚠️ 歷史數據讀取失敗"; }
+            } catch (e) { 
+                statusText.innerText = "⚠️ 資料庫忙碌中，請稍後再試";
+                loadingEl.style.display = 'none';
+            }
         }
 
         async function selectStock(code, name) {
