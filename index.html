@@ -2,9 +2,9 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>STOCKWATCH TERMINAL - 官方直連版</title>
+    <title>STOCKWATCH TERMINAL - 專業歷史紀錄版</title>
     <style>
-        /* --- 1. 專業金融介面：深色高對比設計 --- */
+        /* --- 1. 專業金融介面設計 --- */
         * { box-sizing: border-box; }
         body {
             background-color: #0d1117; color: #d1d4dc;
@@ -20,7 +20,7 @@
             display: flex; align-items: center; padding: 0 20px; font-size: 11px; z-index: 100;
         }
         .header .logo { color: #ff9800; font-weight: bold; letter-spacing: 2px; margin-right: 20px; }
-        .header .status { margin-left: auto; display: flex; align-items: center; }
+        .header .status { margin-left: auto; display: flex; align-items: center; cursor: pointer; }
         .header .dot { width: 8px; height: 8px; background: #8b949e; border-radius: 50%; margin-right: 8px; }
         .header .dot.active { animation: blink 1s infinite; }
 
@@ -31,47 +31,50 @@
         }
         .stock-item {
             cursor: pointer; padding: 15px; border-radius: 10px;
-            margin-bottom: 8px; transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            margin-bottom: 8px; transition: 0.2s;
             background: #0d1117; display: flex; justify-content: space-between; align-items: center;
             border: 1px solid transparent;
         }
-        .stock-item:hover { background: #21262d; }
-        .stock-item.active { 
-            background: #1c2128; border: 1px solid #58a6ff;
-            box-shadow: 0 0 20px rgba(88, 166, 255, 0.15);
-        }
+        .stock-item.active { background: #1c2128; border: 1px solid #58a6ff; }
 
-        /* 右側核心區 */
-        .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; }
+        /* 右側核心區 (改為捲動式以容納歷史紀錄) */
+        .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; overflow-y: auto; }
         #chart-container { 
-            flex: 1; background: #0d1117; 
+            min-height: 400px; background: #0d1117; 
             border: 1px solid #30363d; border-radius: 12px; margin-bottom: 20px; 
-            overflow: hidden;
         }
 
-        /* 警報資訊面板 */
+        /* 價格資訊與歷史面板 */
+        .dashboard { display: grid; grid-template-columns: 1fr 300px; gap: 20px; }
+        
         .alert-panel {
             background: #161b22; border: 1px solid #30363d;
-            border-radius: 12px; padding: 25px; transition: 0.4s ease;
+            border-radius: 12px; padding: 25px;
         }
-        .alert-panel.triggered {
-            background: #2a1414; border: 1px solid #f85149;
-            animation: pulse-red 1.5s infinite;
-        }
+        .alert-panel.triggered { background: #2a1414; border: 1px solid #f85149; animation: pulse-red 1.5s infinite; }
 
-        .price-display { font-size: 56px; font-weight: bold; color: white; letter-spacing: -2px; font-variant-numeric: tabular-nums; }
-        .target-tag { background: #238636; color: white; padding: 4px 12px; border-radius: 6px; font-weight: bold; font-size: 14px; margin-left: 15px; }
+        .price-display { font-size: 56px; font-weight: bold; color: white; letter-spacing: -2px; }
+        
+        /* 📜 歷史紀錄表格樣式 */
+        .history-panel {
+            background: #161b22; border: 1px solid #30363d;
+            border-radius: 12px; padding: 15px; display: flex; flex-direction: column;
+        }
+        .history-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .history-table th { text-align: left; opacity: 0.5; padding-bottom: 10px; border-bottom: 1px solid #30363d; }
+        .history-table td { padding: 8px 0; border-bottom: 1px solid #21262d; }
+        .hist-price { font-weight: bold; color: #58a6ff; }
         
         @keyframes blink { 50% { opacity: 0; } }
-        @keyframes pulse-red { 0% { box-shadow: 0 0 0px #f85149; } 50% { box-shadow: 0 0 25px rgba(248,81,73,0.3); } 100% { box-shadow: 0 0 0px #f85149; } }
+        @keyframes pulse-red { 0% { box-shadow: 0 0 0px #f85149; } 50% { box-shadow: 0 0 20px rgba(248,81,73,0.2); } 100% { box-shadow: 0 0 0px #f85149; } }
     </style>
 </head>
 <body>
 
     <div class="header">
         <span class="logo">STOCKWATCH TERMINAL</span>
-        <span style="opacity: 0.5;">APP MODE | TWSE DIRECT CONNECT</span>
-        <div class="status">
+        <span style="opacity: 0.5;">APP MODE | HISTORICAL LOGGING</span>
+        <div class="status" onclick="fetchMarketData()">
             <div class="dot active" id="status-dot"></div>
             <span id="update-time">等待連線...</span>
         </div>
@@ -87,12 +90,25 @@
         <h2 id="current-title" style="margin: 0 0 10px 0; color: white; font-weight: 500;">2330 台積電</h2>
         <div id="chart-container"></div>
         
-        <div class="alert-panel" id="alert-panel">
-            <div style="display: flex; align-items: center; margin-bottom: 5px;">
-                <span class="price-display" id="price-val">---</span>
-                <span class="target-tag" id="target-val">GOAL: 1100</span>
+        <div class="dashboard">
+            <div class="alert-panel" id="alert-panel">
+                <div style="display: flex; align-items: baseline;">
+                    <span class="price-display" id="price-val">---</span>
+                    <span style="margin-left: 15px; color: #238636; font-weight: bold;" id="target-val">GOAL: 1100</span>
+                </div>
+                <p id="status-text" style="margin: 10px 0 0 0; opacity: 0.6; font-size: 14px;">初始化系統...</p>
             </div>
-            <p id="status-text" style="margin: 0; opacity: 0.6; font-size: 14px;">初始化系統...</p>
+
+            <div class="history-panel">
+                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #ff9800;">同步紀錄 (最近 5 筆)</h4>
+                <table class="history-table">
+                    <thead>
+                        <tr><th>時間</th><th>價格</th></tr>
+                    </thead>
+                    <tbody id="history-body">
+                        </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -100,59 +116,50 @@
 
     <script>
         const twseUrl = "https://openapi.twse.com.tw/v1/stock/ALL";
-
         const container = document.getElementById('chart-container');
-        const priceVal = document.getElementById('price-val');
-        const targetVal = document.getElementById('target-val');
-        const alertPanel = document.getElementById('alert-panel');
-        const statusText = document.getElementById('status-text');
-        const updateTime = document.getElementById('update-time');
-        const dot = document.getElementById('status-dot');
-
+        const historyBody = document.getElementById('history-body');
+        
         let currentSymbol = '2330';
         let currentTarget = 1100;
+        let priceHistory = []; // 用來存歷史紀錄
 
-        // 1. 初始化圖表
         const chart = LightweightCharts.createChart(container, {
-            width: container.clientWidth, height: 450,
+            width: container.clientWidth, height: 400,
             layout: { backgroundColor: '#0d1117', textColor: '#d1d4dc' },
-            grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
-            timeScale: { borderColor: '#30363d' },
-            rightPriceScale: { borderColor: '#30363d' }
+            grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } }
         });
-        const candlestickSeries = chart.addCandlestickSeries({
-            upColor: '#26a69a', downColor: '#ef5350',
-            wickUpColor: '#26a69a', wickDownColor: '#ef5350',
-        });
+        const candlestickSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350' });
 
-        // 🌟 2. 核心功能：直連證交所 (強化偵錯)
+        // 🌟 核心：更新歷史紀錄 UI
+        function addToHistory(price) {
+            const now = new Date().toLocaleTimeString();
+            priceHistory.unshift({ time: now, price: price }); // 加到最前面
+            if (priceHistory.length > 5) priceHistory.pop(); // 只保留 5 筆
+
+            historyBody.innerHTML = priceHistory.map(h => `
+                <tr>
+                    <td>${h.time}</td>
+                    <td class="hist-price">${h.price.toFixed(2)}</td>
+                </tr>
+            `).join('');
+        }
+
         async function fetchMarketData() {
             try {
-                statusText.innerHTML = "⏳ 正在請求官方即時數據...";
-                dot.style.background = "#ff9800";
-
                 const response = await fetch(twseUrl);
-                
-                if (!response.ok) {
-                    throw new Error(`伺服器代碼: ${response.status} (可能是維護中)`);
-                }
+                if (!response.ok) throw new Error(`連線失敗: ${response.status}`);
                 
                 const allData = await response.json();
-                
-                // 凌晨檢查：如果伺服器回傳空陣列
-                if (!allData || allData.length === 0) {
-                    throw new Error("伺服器目前未回傳任何資料 (凌晨維護時段)");
-                }
-
                 const stock = allData.find(s => s.Code === currentSymbol);
 
                 if (stock) {
                     const price = parseFloat(stock.ClosingPrice);
-                    priceVal.innerText = price.toFixed(2);
-                    targetVal.innerText = `GOAL: ${currentTarget}`;
-                    updateTime.innerText = "官方直連: " + new Date().toLocaleTimeString();
-                    dot.style.background = "#238636"; 
-                    statusText.innerText = "✅ 官方數據同步中 (直連模式)";
+                    document.getElementById('price-val').innerText = price.toFixed(2);
+                    document.getElementById('update-time').innerText = "最後同步: " + new Date().toLocaleTimeString();
+                    document.getElementById('status-dot').style.background = "#238636";
+
+                    // 存入歷史紀錄
+                    addToHistory(price);
 
                     candlestickSeries.update({
                         time: Math.floor(Date.now() / 1000),
@@ -162,20 +169,18 @@
                         close: price
                     });
 
+                    const panel = document.getElementById('alert-panel');
                     if (price >= currentTarget) {
-                        alertPanel.classList.add('triggered');
-                        statusText.innerHTML = `⚠️ <b>達標！</b> 報價 ${price} 已觸發警報。`;
+                        panel.classList.add('triggered');
+                        document.getElementById('status-text').innerHTML = `⚠️ <b>目標達成！</b> 已達 ${currentTarget}`;
                     } else {
-                        alertPanel.classList.remove('triggered');
-                        statusText.innerText = `監控中... 距離目標還差 ${(currentTarget - price).toFixed(2)} 元`;
+                        panel.classList.remove('triggered');
+                        document.getElementById('status-text').innerText = `監控中... 距離目標還差 ${(currentTarget - price).toFixed(2)} 元`;
                     }
-                } else {
-                    throw new Error(`找不到股票代碼 ${currentSymbol} 的今日數據`);
                 }
             } catch (error) {
-                console.error("連線錯誤:", error);
-                dot.style.background = "#f85149";
-                statusText.innerHTML = `❌ <span style='color:#f85149'>連線狀態: ${error.message}</span><br><small>註：現在是凌晨維護時間，請等早晨開盤再試。</small>`;
+                document.getElementById('status-dot').style.background = "#f85149";
+                document.getElementById('status-text').innerHTML = `❌ <span style='color:#f85149'>連線異常: ${error.message}</span>`;
             }
         }
 
@@ -184,8 +189,12 @@
                 currentSymbol = this.getAttribute('data-symbol');
                 currentTarget = parseFloat(this.getAttribute('data-target'));
                 document.getElementById('current-title').innerText = this.innerText;
+                document.getElementById('target-val').innerText = `GOAL: ${currentTarget}`;
                 document.querySelectorAll('.stock-item').forEach(i => i.classList.remove('active'));
                 this.classList.add('active');
+                
+                priceHistory = []; // 切換股票時清空歷史日誌
+                historyBody.innerHTML = "";
                 candlestickSeries.setData([]); 
                 fetchMarketData();
             });
@@ -193,8 +202,7 @@
 
         setInterval(fetchMarketData, 15000);
         fetchMarketData();
-
-        window.onresize = () => chart.resize(container.clientWidth, 450);
+        window.onresize = () => chart.resize(container.clientWidth, 400);
     </script>
 </body>
 </html>
