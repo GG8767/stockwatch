@@ -2,60 +2,39 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>STOCKWATCH TERMINAL - 雲端直連版</title>
+    <title>STOCKWATCH TERMINAL - 價量全能版</title>
     <style>
-        /* --- 專業金融介面設計 --- */
         * { box-sizing: border-box; }
         body {
             background-color: #0d1117; color: #d1d4dc;
-            font-family: 'Segoe UI', 'SF Pro Display', sans-serif;
-            margin: 0; display: flex; height: 100vh; overflow: hidden;
+            font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden;
         }
-
         .header {
             position: absolute; top: 0; width: 100%; height: 40px;
-            background: rgba(22, 27, 34, 0.9); backdrop-filter: blur(8px);
-            border-bottom: 1px solid #30363d;
+            background: rgba(22, 27, 34, 0.9); border-bottom: 1px solid #30363d;
             display: flex; align-items: center; padding: 0 20px; font-size: 11px; z-index: 100;
         }
         .header .logo { color: #ff9800; font-weight: bold; letter-spacing: 2px; margin-right: 20px; }
-        .ma-legend { display: flex; gap: 15px; margin-left: 20px; font-size: 10px; }
-        .ma-5 { color: #f1c40f; } .ma-20 { color: #9b59b6; } .ma-60 { color: #e67e22; }
-
+        .ma-legend { display: flex; gap: 15px; font-size: 10px; }
         .status { margin-left: auto; display: flex; align-items: center; cursor: pointer; }
-        .header .dot { width: 8px; height: 8px; background: #8b949e; border-radius: 50%; margin-right: 8px; }
+        .dot { width: 8px; height: 8px; background: #8b949e; border-radius: 50%; margin-right: 8px; }
 
-        /* 左側：搜尋與動態清單 */
         .left-panel {
-            width: 280px; background-color: #161b22;
-            border-right: 1px solid #30363d; padding: 50px 10px 10px 10px;
-            display: flex; flex-direction: column;
+            width: 280px; background-color: #161b22; border-right: 1px solid #30363d;
+            padding: 50px 10px 10px 10px; display: flex; flex-direction: column;
         }
-        .search-box {
-            background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
-            color: white; padding: 10px; width: 100%; margin-bottom: 15px; outline: none;
-        }
-        
+        .search-box { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: white; padding: 10px; margin-bottom: 15px; outline: none; }
         #stock-list { flex: 1; overflow-y: auto; }
-        .stock-item {
-            cursor: pointer; padding: 12px; border-radius: 8px;
-            margin-bottom: 5px; transition: 0.2s;
-            background: #0d1117; display: flex; justify-content: space-between;
-            font-size: 13px; border: 1px solid transparent;
-        }
-        .stock-item:hover { background: #21262d; }
-        .stock-item.active { background: #1c2128; border: 1px solid #58a6ff; }
+        .stock-item { cursor: pointer; padding: 12px; border-radius: 8px; margin-bottom: 5px; background: #0d1117; display: flex; justify-content: space-between; font-size: 13px; }
+        .stock-item.active { border: 1px solid #58a6ff; background: #1c2128; }
 
-        /* 右側核心區 */
         .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; overflow-y: auto; }
-        #chart-container { min-height: 480px; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; margin-bottom: 20px; }
+        #chart-container { min-height: 520px; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; margin-bottom: 20px; }
 
         .dashboard { display: grid; grid-template-columns: 1fr 300px; gap: 20px; }
         .alert-panel { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 25px; }
         .alert-panel.triggered { background: #2a1414; border: 1px solid #f85149; animation: pulse-red 1.5s infinite; }
         .price-display { font-size: 56px; font-weight: bold; color: white; letter-spacing: -2px; }
-
-        .history-panel { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 15px; }
         
         @keyframes pulse-red { 0% { box-shadow: 0 0 0px #f85149; } 50% { box-shadow: 0 0 20px rgba(248,81,73,0.2); } 100% { box-shadow: 0 0 0px #f85149; } }
     </style>
@@ -65,11 +44,12 @@
     <div class="header">
         <span class="logo">STOCKWATCH TERMINAL</span>
         <div class="ma-legend">
-            <span class="ma-5">● MA5</span><span class="ma-20">● MA20</span><span class="ma-60">● MA60</span>
+            <span style="color:#f1c40f">● MA5</span><span style="color:#9b59b6">● MA20</span><span style="color:#e67e22">● MA60</span>
+            <span style="color:#26a69a; margin-left:10px;">📊 成交量</span>
         </div>
         <div class="status" onclick="initStockDatabase()">
             <div class="dot" id="status-dot"></div>
-            <span id="update-time">初始化中...</span>
+            <span id="update-time">連線中...</span>
         </div>
     </div>
 
@@ -79,7 +59,7 @@
     </div>
 
     <div class="right-panel">
-        <h2 id="current-title" style="margin: 0 0 10px 0; color: white; font-weight: 500;">請選擇股票</h2>
+        <h2 id="current-title" style="margin: 0 0 10px 0; color: white; font-weight: 500;">請選擇標的</h2>
         <div id="chart-container"></div>
         <div class="dashboard">
             <div class="alert-panel" id="alert-panel">
@@ -89,11 +69,9 @@
                 </div>
                 <p id="status-text" style="margin: 10px 0 0 0; opacity: 0.6; font-size: 14px;">等待搜尋。</p>
             </div>
-            <div class="history-panel">
-                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #ff9800;">當次連線紀錄</h4>
-                <table style="width:100%; font-size:12px; border-collapse: collapse;">
-                    <tbody id="history-body"></tbody>
-                </table>
+            <div class="alert-panel" style="padding:15px">
+                <h4 style="margin:0 0 10px 0; font-size:12px; color:#ff9800">即時更新紀錄</h4>
+                <div id="history-body" style="font-size:11px; line-height:1.8"></div>
             </div>
         </div>
     </div>
@@ -102,28 +80,38 @@
 
     <script>
         const twseUrl = "https://openapi.twse.com.tw/v1/stock/ALL";
-        const fallbackStocks = [
-            {Code: "2330", Name: "台積電"}, {Code: "2409", Name: "友達"},
-            {Code: "2317", Name: "鴻海"}, {Code: "2454", Name: "聯發科"}, {Code: "2603", Name: "長榮"}
-        ];
-
-        let allStocks = []; 
-        let currentSymbol = '';
-        let currentTarget = 0;
-        let tickLog = []; // 僅存放在記憶體，關閉後清空
+        const fallbackStocks = [{Code: "2330", Name: "台積電"}, {Code: "2409", Name: "友達"}, {Code: "2317", Name: "鴻海"}];
+        let allStocks = [], currentSymbol = '', currentTarget = 0, tickLog = [];
 
         const container = document.getElementById('chart-container');
         const chart = LightweightCharts.createChart(container, {
-            width: container.clientWidth, height: 480,
+            width: container.clientWidth, height: 520,
             layout: { backgroundColor: '#0d1117', textColor: '#d1d4dc' },
             grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
-            timeScale: { rightOffset: 10, barSpacing: 8 }
+            timeScale: { rightOffset: 10, barSpacing: 8 },
+            rightPriceScale: { borderColor: '#30363d' }
         });
 
+        // 1. K線層
         const candlestickSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350' });
+        // 2. 均線層
         const ma5Series = chart.addLineSeries({ color: '#f1c40f', lineWidth: 1 });
         const ma20Series = chart.addLineSeries({ color: '#9b59b6', lineWidth: 1 });
         const ma60Series = chart.addLineSeries({ color: '#e67e22', lineWidth: 2 });
+        // 3. 🌟 成交量層 (量能圖)
+        const volumeSeries = chart.addHistogramSeries({
+            color: '#26a69a',
+            priceFormat: { type: 'volume' },
+            priceScaleId: '', // 設為空字串，讓它與 K 線共用，但我們會手動限制高度
+        });
+
+        // 設定成交量的位置 (縮在底部 20%)
+        volumeSeries.priceScale().applyOptions({
+            scaleMargins: { top: 0.8, bottom: 0 },
+        });
+        candlestickSeries.priceScale().applyOptions({
+            scaleMargins: { top: 0.1, bottom: 0.3 },
+        });
 
         function calculateSMA(data, count) {
             const avg = [];
@@ -137,67 +125,59 @@
         }
 
         async function initStockDatabase() {
-            const dot = document.getElementById('status-dot');
-            const updateTime = document.getElementById('update-time');
             try {
                 const response = await fetch(twseUrl);
                 allStocks = await response.json();
-                updateTime.innerText = `✅ 雲端連線成功 (${allStocks.length} 檔)`;
-                dot.style.background = "#238636";
+                document.getElementById('update-time').innerText = `✅ 就緒 (${allStocks.length} 檔)`;
+                document.getElementById('status-dot').style.background = "#238636";
                 renderStockList(allStocks.slice(0, 50));
             } catch (err) {
                 allStocks = fallbackStocks;
-                updateTime.innerText = "⚠️ 官方維護中，使用離線名單";
-                dot.style.background = "#f85149";
+                document.getElementById('update-time').innerText = "⚠️ 官方維護中";
                 renderStockList(allStocks);
             }
         }
 
         function renderStockList(list) {
-            const listContainer = document.getElementById('stock-list');
-            listContainer.innerHTML = list.map(s => `
+            document.getElementById('stock-list').innerHTML = list.map(s => `
                 <div class="stock-item ${s.Code === currentSymbol ? 'active' : ''}" onclick="selectStock('${s.Code}', '${s.Name}')">
                     <span>${s.Code}</span><span style="opacity:0.6">${s.Name}</span>
                 </div>
             `).join('');
         }
 
-        document.getElementById('search-input').addEventListener('input', (e) => {
-            const keyword = e.target.value.toLowerCase();
-            const filtered = allStocks.filter(s => s.Code.includes(keyword) || s.Name.includes(keyword));
-            renderStockList(filtered.slice(0, 50));
-        });
-
         async function loadRealHistory(symbol) {
-            const statusText = document.getElementById('status-text');
-            statusText.innerText = `⏳ 正在從 FinMind 雲端抓取歷史 K 線...`;
             const startDate = new Date();
             startDate.setMonth(startDate.getMonth() - 8);
             const finMindUrl = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${symbol}&start_date=${startDate.toISOString().split('T')[0]}`;
             try {
                 const res = await fetch(finMindUrl);
                 const json = await res.json();
-                if (json.data && json.data.length > 0) {
-                    const formatted = json.data.map(d => ({ time: d.date, open: d.open, high: d.max, low: d.min, close: d.close }));
+                if (json.data) {
+                    const formatted = json.data.map(d => ({ 
+                        time: d.date, open: d.open, high: d.max, low: d.min, close: d.close 
+                    }));
+                    const volumeData = json.data.map(d => ({
+                        time: d.date, 
+                        value: d.Trading_Volume,
+                        color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
+                    }));
+                    
                     candlestickSeries.setData(formatted);
+                    volumeSeries.setData(volumeData); // 載入歷史成交量
                     ma5Series.setData(calculateSMA(formatted, 5));
                     ma20Series.setData(calculateSMA(formatted, 20));
                     ma60Series.setData(calculateSMA(formatted, 60));
                     chart.timeScale().fitContent();
-                    statusText.innerText = "✅ 歷史數據同步完成";
                 }
-            } catch (e) { statusText.innerText = "❌ 雲端歷史數據抓取失敗"; }
+            } catch (e) {}
         }
 
         async function selectStock(code, name) {
             currentSymbol = code;
             document.getElementById('current-title').innerText = `${code} ${name}`;
-            const inputTarget = prompt(`請設定 ${name} 的目標價:`, "0");
-            currentTarget = parseFloat(inputTarget) || 0;
+            currentTarget = parseFloat(prompt(`設定 ${name} 目標價:`, "0")) || 0;
             document.getElementById('target-val').innerText = `GOAL: ${currentTarget}`;
-            
-            tickLog = []; // 切換時清空記憶體紀錄
-            document.getElementById('history-body').innerHTML = "";
             await loadRealHistory(code);
             await fetchRealtimeData();
         }
@@ -207,29 +187,34 @@
             try {
                 const response = await fetch(twseUrl);
                 const allData = await response.json();
-                const stock = allData.find(s => s.Code === currentSymbol);
-                if (stock) {
-                    const price = parseFloat(stock.ClosingPrice);
+                const s = allData.find(x => x.Code === currentSymbol);
+                if (s) {
+                    const price = parseFloat(s.ClosingPrice);
                     document.getElementById('price-val').innerText = price.toFixed(2);
                     
-                    // 僅更新記憶體中的紀錄
-                    const now = new Date().toLocaleTimeString();
-                    tickLog.unshift({ time: now, price: price });
-                    if (tickLog.length > 10) tickLog.pop();
-                    document.getElementById('history-body').innerHTML = tickLog.map(h => `<tr><td style="padding:5px 0">${h.time}</td><td style="color:#58a6ff;font-weight:bold">${h.price.toFixed(2)}</td></tr>`).join('');
+                    // 更新 K 棒與成交量柱子
+                    const time = new Date().toISOString().split('T')[0];
+                    candlestickSeries.update({ time, open: parseFloat(s.OpeningPrice)||price, high: parseFloat(s.HighestPrice)||price, low: parseFloat(s.LowestPrice)||price, close: price });
+                    volumeSeries.update({ time, value: parseFloat(s.TradeVolume) || 0 });
 
-                    if (price >= currentTarget && currentTarget > 0) {
-                        document.getElementById('alert-panel').classList.add('triggered');
-                    } else {
-                        document.getElementById('alert-panel').classList.remove('triggered');
-                    }
+                    tickLog.unshift(`${new Date().toLocaleTimeString()} - $${price.toFixed(2)}`);
+                    if (tickLog.length > 5) tickLog.pop();
+                    document.getElementById('history-body').innerHTML = tickLog.join('<br>');
+
+                    if (price >= currentTarget && currentTarget > 0) document.getElementById('alert-panel').classList.add('triggered');
+                    else document.getElementById('alert-panel').classList.remove('triggered');
                 }
-            } catch (e) { }
+            } catch (e) {}
         }
+
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            const k = e.target.value.toLowerCase();
+            renderStockList(allStocks.filter(s => s.Code.includes(k) || s.Name.includes(k)).slice(0, 50));
+        });
 
         initStockDatabase();
         setInterval(fetchRealtimeData, 30000);
-        window.onresize = () => chart.resize(container.clientWidth, 480);
+        window.onresize = () => chart.resize(container.clientWidth, 520);
     </script>
 </body>
 </html>
