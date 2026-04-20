@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>STOCKWATCH TERMINAL - 上市專屬版</title>
+    <title>STOCKWATCH TERMINAL - 強檔首頁版</title>
     <style>
         /* --- 專業金融介面：深色高對比 --- */
         * { box-sizing: border-box; }
@@ -23,6 +23,9 @@
         .stock-item { cursor: pointer; padding: 12px; border-radius: 8px; margin-bottom: 5px; background: #0d1117; display: flex; justify-content: space-between; align-items: center; font-size: 13px; border: 1px solid transparent; transition: 0.2s; }
         .stock-item:hover { background: #21262d; }
         .stock-item.active { border: 1px solid #58a6ff; background: #1c2128; }
+
+        .retry-btn { background: #f85149; color: white; border: none; padding: 10px; width: 100%; border-radius: 6px; cursor: pointer; font-weight: bold; margin-top: 15px; transition: 0.2s; box-shadow: 0 4px 15px rgba(248,81,73,0.2); }
+        .retry-btn:hover { background: #ff6a63; box-shadow: 0 4px 20px rgba(248,81,73,0.4); }
 
         .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; overflow-y: auto; }
         #chart-container { min-height: 520px; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; margin-bottom: 20px; }
@@ -53,12 +56,12 @@
         </div>
         <div class="status" onclick="initStockDatabase()" title="點擊強制重新連線">
             <div class="dot" id="status-dot"></div>
-            <span id="update-time">上市引擎啟動中...</span>
+            <span id="update-time">三引擎啟動中...</span>
         </div>
     </div>
 
     <div class="left-panel">
-        <input type="text" class="search-box" id="search-input" placeholder="搜尋上市股票 (如: 台積電)...">
+        <input type="text" class="search-box" id="search-input" placeholder="搜尋全台股 (如: 華邦電)...">
         <div id="stock-list"></div>
     </div>
 
@@ -100,16 +103,17 @@
             return response.json();
         }
 
-        let allStocks = [], currentSymbol = '', tickLog = [];
-        let chart, candlestickSeries, volumeSeries, ma5Series, ma20Series, ma60Series;
-
-        // 純上市備援名單
-        const fallbackStocks = [
-            {Code: "2330", Name: "台積電", Market: "上市"}, {Code: "2409", Name: "友達", Market: "上市"}, 
-            {Code: "2317", Name: "鴻海", Market: "上市"}, {Code: "2454", Name: "聯發科", Market: "上市"},
-            {Code: "2308", Name: "台達電", Market: "上市"}, {Code: "2603", Name: "長榮", Market: "上市"},
-            {Code: "2881", Name: "富邦金", Market: "上市"}, {Code: "2382", Name: "廣達", Market: "上市"}
+        // 🌟 核心升級：首頁強檔 50 名單 (涵蓋權值、AI、航運、熱門中小型)
+        const top50Codes = [
+            "2330", "2317", "2454", "2382", "2308", "2881", "2882", "2603", "2409", "3231",
+            "2344", "2303", "2891", "1301", "2002", "2412", "1216", "2886", "2884", "2618",
+            "2609", "3481", "2356", "2379", "3034", "3037", "3008", "2353", "2357", "2324",
+            "8069", "3105", "6488", "5483", "8299", "3529", "3661", "6415", "5274", "3017",
+            "2395", "2376", "2449", "2362", "2385", "3293", "6274", "8215", "6147", "3131"
         ];
+
+        let allStocks = [], defaultTop50List = [], currentSymbol = '', tickLog = [];
+        let chart, candlestickSeries, volumeSeries, ma5Series, ma20Series, ma60Series;
 
         function initChart() {
             if (chart) return; 
@@ -142,11 +146,10 @@
             return avg;
         }
 
-        // 🌟 初始化：只抓取 TWSE (上市) 股票
         async function initStockDatabase() {
             const btn = document.getElementById('update-time');
             const dot = document.getElementById('status-dot');
-            btn.innerText = "連線 FinMind (上市過濾)...";
+            btn.innerText = "連線 FinMind 資料庫...";
             dot.style.background = "#ff9800";
             
             try {
@@ -155,38 +158,40 @@
                 
                 if (json.data && json.data.length > 0) {
                     allStocks = json.data
-                        .filter(s => s.type === 'twse') // 嚴格限制只要上市
-                        .filter(s => !/購|售|牛|熊/.test(s.stock_name)) // 排除權證
-                        .map(s => ({
-                            Code: s.stock_id,
-                            Name: s.stock_name,
-                            Market: '上市'
-                        }));
+                        .filter(s => s.type === 'twse' || s.type === 'tpex')
+                        .filter(s => !/購|售|牛|熊/.test(s.stock_name))
+                        .map(s => ({ Code: s.stock_id, Name: s.stock_name, Market: s.type === 'twse' ? '上市' : '上櫃' }));
                     
-                    btn.innerText = `✅ 上市專屬就緒 (${allStocks.length} 檔)`;
+                    // 篩選出強檔 50 作為首頁預設清單
+                    defaultTop50List = allStocks.filter(s => top50Codes.includes(s.Code));
+                    
+                    btn.innerText = `✅ 系統就緒 (支援 ${allStocks.length} 檔)`;
                     dot.style.background = "#238636";
-                    renderStockList(allStocks);
+                    
+                    // 初始載入顯示強檔首頁
+                    renderStockList(defaultTop50List, true);
                 } else {
                     throw new Error("無數據");
                 }
             } catch (err) {
-                allStocks = fallbackStocks;
-                btn.innerText = "⚠️ 網路異常，載入備用清單";
+                btn.innerText = "⚠️ 網路異常，請稍後重試";
                 dot.style.background = "#f85149";
-                renderStockList(allStocks);
             }
             initChart();
         }
 
-        function renderStockList(list) {
-            const displayList = list.slice(0, 50); 
+        // 🌟 修改選單渲染邏輯：加入 isHomePage 參數
+        function renderStockList(list, isHomePage = false) {
+            // 搜尋模式下為了效能，最多顯示 50 筆
+            const displayList = isHomePage ? list : list.slice(0, 50); 
             
             let html = displayList.map(s => `
                 <div class="stock-item ${s.Code === currentSymbol ? 'active' : ''}" onclick="selectStock('${s.Code}', '${s.Name}')">
                     <div style="display:flex; align-items:center;">
                         <span style="font-size:10px; padding:2px 4px; border-radius:3px; margin-right:8px; 
-                                     background: #004d40; border:1px solid #26a69a">
-                            TWSE
+                                     background: ${s.Market==='上市'?'#004d40':'#3e2723'}; 
+                                     border:1px solid ${s.Market==='上市'?'#26a69a':'#e67e22'}">
+                            ${s.Market}
                         </span>
                         <span style="font-weight:bold;">${s.Code}</span>
                     </div>
@@ -194,9 +199,15 @@
                 </div>
             `).join('');
 
-            if (list.length > 50) {
-                html += `<div style="text-align:center; opacity:0.4; padding: 15px 0; font-size:12px;">...隱藏其餘上市標的，請使用搜尋框</div>`;
+            // 依據是否為首頁，顯示不同的提示文字
+            if (isHomePage) {
+                html += `<div style="text-align:center; opacity:0.4; padding: 15px 0; font-size:12px;">👆 以上為熱門強檔 50<br>搜尋其他標的請使用上方搜尋框</div>`;
+            } else if (list.length > 50) {
+                html += `<div style="text-align:center; opacity:0.4; padding: 15px 0; font-size:12px;">...隱藏其餘標的，請繼續輸入以精確搜尋</div>`;
+            } else if (list.length === 0) {
+                html += `<div style="text-align:center; opacity:0.4; padding: 15px 0; font-size:12px;">找不到符合的標的</div>`;
             }
+
             document.getElementById('stock-list').innerHTML = html;
         }
 
@@ -224,9 +235,7 @@
                     ma60Series.setData(calculateSMA(formatted, 60));
                     
                     chart.timeScale().fitContent();
-                    statusText.innerHTML = "API 狀態: ✅ 歷史載入成功，啟動即時報價";
-                } else {
-                     statusText.innerHTML = `API 狀態: <span style="color:#ff9800">⚠️ 歷史資料庫無此標的數據</span>`;
+                    statusText.innerHTML = "API 狀態: ✅ 歷史載入成功，啟動雙備援即時報價";
                 }
             } catch (e) {
                 statusText.innerHTML = `API 狀態: <span style="color:#f85149">❌ 歷史資料庫連線超時</span>`;
@@ -251,54 +260,49 @@
             tickLog = []; 
             document.getElementById('tick-body').innerText = "";
             
-            const keyword = document.getElementById('search-input').value.toLowerCase();
-            const currentList = keyword ? allStocks.filter(s => s.Code.includes(keyword) || s.Name.includes(keyword)) : allStocks;
-            renderStockList(currentList);
+            const keyword = document.getElementById('search-input').value.trim().toLowerCase();
+            if (keyword === "") {
+                renderStockList(defaultTop50List, true);
+            } else {
+                renderStockList(allStocks.filter(s => s.Code.includes(keyword) || s.Name.includes(keyword)));
+            }
             
             await loadOneYearHistory(code);
             await fetchRealtimeSync();
         }
 
-        // 🌟 簡化即時連線：Yahoo (.TW) + 證交所備援
         async function fetchRealtimeSync() {
             if (!currentSymbol) return;
             const stockInfo = allStocks.find(x => x.Code === currentSymbol);
             if (!stockInfo) return;
 
-            let price = 0, open = 0, high = 0, low = 0, vol = 0;
-            let dataSource = "";
+            let price = 0, open = 0, high = 0, low = 0, vol = 0, dataSource = "";
 
             try {
-                // Yahoo 只需要處理 .TW 結尾
-                const yahooSymbol = `${currentSymbol}.TW`;
+                const yahooSymbol = stockInfo.Market === '上市' ? `${currentSymbol}.TW` : `${currentSymbol}.TWO`;
                 const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=1d`;
-                
                 const yData = await fetchSafe(yahooUrl, 5000);
                 const result = yData.chart.result[0];
-                price = result.meta.regularMarketPrice;
-                vol = result.meta.regularMarketVolume || 0;
-                
+                price = result.meta.regularMarketPrice; vol = result.meta.regularMarketVolume || 0;
                 const indicators = result.indicators.quote[0];
-                open = indicators.open[0] || price;
-                high = indicators.high[0] || price;
-                low = indicators.low[0] || price;
-                
+                open = indicators.open[0] || price; high = indicators.high[0] || price; low = indicators.low[0] || price;
                 dataSource = "Yahoo財經";
-
             } catch (yahooError) {
-                // 備用只剩 TWSE
                 try {
-                    const twData = await fetchSafe("https://openapi.twse.com.tw/v1/stock/ALL", 5000);
-                    const s = twData.find(x => x.Code === currentSymbol);
-                    if (s) { price = parseFloat(s.ClosingPrice); open = parseFloat(s.OpeningPrice)||price; high = parseFloat(s.HighestPrice)||price; low = parseFloat(s.LowestPrice)||price; vol = parseFloat(s.TradeVolume)||0; dataSource = "TWSE證交所"; }
-                } catch (twseError) {
-                    console.log("備用 API 也失效");
-                }
+                    if (stockInfo.Market === '上市') {
+                        const twData = await fetchSafe("https://openapi.twse.com.tw/v1/stock/ALL", 5000);
+                        const s = twData.find(x => x.Code === currentSymbol);
+                        if (s) { price = parseFloat(s.ClosingPrice); open = parseFloat(s.OpeningPrice)||price; high = parseFloat(s.HighestPrice)||price; low = parseFloat(s.LowestPrice)||price; vol = parseFloat(s.TradeVolume)||0; dataSource = "TWSE證交所"; }
+                    } else {
+                        const tpData = await fetchSafe("https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes", 5000);
+                        const s = tpData.find(x => x.SecuritiesCompanyCode === currentSymbol);
+                        if (s) { price = parseFloat(s.Close); open = parseFloat(s.Open)||price; high = parseFloat(s.High)||price; low = parseFloat(s.Low)||price; vol = parseFloat(s.TradingVolume)||0; dataSource = "TPEx櫃買"; }
+                    }
+                } catch (twseError) {}
             }
 
             if (price > 0) {
                 document.getElementById('price-val').innerText = price.toFixed(2);
-                
                 const time = new Date().toISOString().split('T')[0];
                 candlestickSeries.update({ time, open, high, low, close: price });
                 volumeSeries.update({ time, value: vol });
@@ -318,9 +322,14 @@
             }
         }
 
+        // 🌟 搜尋框邏輯升級：清空時返回強檔 50
         document.getElementById('search-input').addEventListener('input', (e) => {
-            const k = e.target.value.toLowerCase();
-            renderStockList(allStocks.filter(s => s.Code.includes(k) || s.Name.includes(k)));
+            const k = e.target.value.trim().toLowerCase();
+            if (k === '') {
+                renderStockList(defaultTop50List, true);
+            } else {
+                renderStockList(allStocks.filter(s => s.Code.includes(k) || s.Name.includes(k)));
+            }
         });
         document.getElementById('target-input').addEventListener('input', fetchRealtimeSync); 
 
