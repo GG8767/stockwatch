@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>STOCKWATCH TERMINAL - 三引擎全開版</title>
+    <title>STOCKWATCH TERMINAL - 純淨過濾版</title>
     <style>
         /* --- 專業金融介面：深色高對比 --- */
         * { box-sizing: border-box; }
@@ -61,7 +61,7 @@
     </div>
 
     <div class="left-panel">
-        <input type="text" class="search-box" id="search-input" placeholder="搜尋全台股 (如: 華邦電)...">
+        <input type="text" class="search-box" id="search-input" placeholder="搜尋一般股票/ETF...">
         <div id="stock-list"></div>
     </div>
 
@@ -94,7 +94,6 @@
             return true;
         };
 
-        // 超時安全獲取
         async function fetchSafe(url, timeoutMs = 8000) {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -138,7 +137,6 @@
             return avg;
         }
 
-        // 🌟 引擎 1：FinMind 全台股名單 (超穩定，一次抓齊上市+上櫃)
         async function initStockDatabase() {
             const btn = document.getElementById('update-time');
             const dot = document.getElementById('status-dot');
@@ -150,16 +148,17 @@
                 const json = await fetchSafe(url, 10000);
                 
                 if (json.data && json.data.length > 0) {
-                    // 過濾出上市與上櫃股票
                     allStocks = json.data
                         .filter(s => s.type === 'twse' || s.type === 'tpex')
+                        // 🌟 核心過濾器：拔除所有權證 (名字包含 購、售、牛、熊 的商品)
+                        .filter(s => !/購|售|牛|熊/.test(s.stock_name))
                         .map(s => ({
                             Code: s.stock_id,
                             Name: s.stock_name,
                             Market: s.type === 'twse' ? '上市' : '上櫃'
                         }));
                     
-                    btn.innerText = `✅ FinMind 就緒 (${allStocks.length} 檔)`;
+                    btn.innerText = `✅ 過濾完成 (${allStocks.length} 檔實體股票/ETF)`;
                     dot.style.background = "#238636";
                     renderStockList(allStocks);
                 } else {
@@ -220,6 +219,8 @@
                     
                     chart.timeScale().fitContent();
                     statusText.innerHTML = "API 狀態: ✅ 歷史載入成功，啟動雙備援即時報價";
+                } else {
+                     statusText.innerHTML = `API 狀態: <span style="color:#ff9800">⚠️ 歷史資料庫無此標的數據</span>`;
                 }
             } catch (e) {
                 statusText.innerHTML = `API 狀態: <span style="color:#f85149">❌ 歷史資料庫連線超時</span>`;
@@ -233,6 +234,15 @@
             document.getElementById('target-input').value = "0"; 
             document.getElementById('alert-panel').style.background = "#161b22";
             document.getElementById('alert-panel').style.border = "1px solid #30363d";
+            
+            // 🌟 修復殘留圖表：切換股票時，瞬間清空舊的圖表與價格
+            document.getElementById('price-val').innerText = "---";
+            candlestickSeries.setData([]);
+            volumeSeries.setData([]);
+            ma5Series.setData([]);
+            ma20Series.setData([]);
+            ma60Series.setData([]);
+
             tickLog = []; 
             document.getElementById('tick-body').innerText = "";
             
@@ -244,7 +254,6 @@
             await fetchRealtimeSync();
         }
 
-        // 🌟 引擎 2 & 3：Yahoo Finance 主力 + TWSE/TPEx 備用
         async function fetchRealtimeSync() {
             if (!currentSymbol) return;
             const stockInfo = allStocks.find(x => x.Code === currentSymbol);
@@ -254,7 +263,6 @@
             let dataSource = "";
 
             try {
-                // 優先嘗試 Yahoo Finance API (全球最穩，速度最快)
                 const yahooSymbol = stockInfo.Market === '上市' ? `${currentSymbol}.TW` : `${currentSymbol}.TWO`;
                 const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=1d`;
                 
@@ -263,7 +271,6 @@
                 price = result.meta.regularMarketPrice;
                 vol = result.meta.regularMarketVolume || 0;
                 
-                // K棒四價
                 const indicators = result.indicators.quote[0];
                 open = indicators.open[0] || price;
                 high = indicators.high[0] || price;
@@ -272,7 +279,6 @@
                 dataSource = "Yahoo財經";
 
             } catch (yahooError) {
-                // 如果 Yahoo 失敗，自動無縫切換到台灣證交所/櫃買中心
                 try {
                     if (stockInfo.Market === '上市') {
                         const twData = await fetchSafe("https://openapi.twse.com.tw/v1/stock/ALL", 5000);
@@ -288,7 +294,6 @@
                 }
             }
 
-            // 更新畫面
             if (price > 0) {
                 document.getElementById('price-val').innerText = price.toFixed(2);
                 
@@ -296,7 +301,6 @@
                 candlestickSeries.update({ time, open, high, low, close: price });
                 volumeSeries.update({ time, value: vol });
 
-                // 在 Log 中顯示目前是哪個 API 在扛
                 tickLog.unshift(`[${new Date().toLocaleTimeString()}] $${price.toFixed(2)} (⚡ ${dataSource})`);
                 if (tickLog.length > 5) tickLog.pop();
                 document.getElementById('tick-body').innerHTML = tickLog.join('<br>');
