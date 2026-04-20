@@ -5,7 +5,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>STOCKWATCH TERMINAL - 雙視角全能版</title>
+    <title>STOCKWATCH TERMINAL - 雙視角穩定版</title>
     <style>
         * { box-sizing: border-box; }
         body { background-color: #0d1117; color: #d1d4dc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
@@ -33,7 +33,6 @@
         .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; overflow: hidden; }
         .title-bar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
         
-        /* 🌟 切割佈局：用 Flexbox 切出上下兩塊圖表 */
         #chart-wrapper { display: flex; flex-direction: column; flex: 1; gap: 15px; overflow: hidden; }
         #main-chart { flex: 7; position: relative; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; overflow: hidden; }
         #intraday-chart { flex: 3; position: relative; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; overflow: hidden; }
@@ -104,11 +103,8 @@
 
         let allStocks = [], defaultTop50List = [], currentSymbol = '';
         
-        // 日K圖表物件
         let chart, candlestickSeries, volumeSeries, ma5Series, ma20Series, ma60Series;
         let chartLegend, priceTracker;  
-        
-        // 🌟 即時走勢圖表物件
         let intradayChart, intradaySeries, intradayTracker;
 
         window.globalChartData = [];
@@ -133,7 +129,6 @@
 
         function renderLegend(paramData, paramVol, paramTime) {
             if (!paramData || paramData.open === undefined) return;
-            
             let timeStr = typeof paramTime === 'object' ? `${paramTime.year}-${String(paramTime.month).padStart(2,'0')}-${String(paramTime.day).padStart(2,'0')}` : paramTime;
 
             let prevClose = paramData.open; 
@@ -170,9 +165,7 @@
         function initChart() {
             if (chart) return; 
 
-            // -----------------------------
-            // 1. 初始化：上方日 K 線圖
-            // -----------------------------
+            // --- 1. 上方日 K 線圖 ---
             const mainContainer = document.getElementById('main-chart');
             
             chartLegend = document.createElement('div');
@@ -233,12 +226,9 @@
                 renderLegend(targetData, targetVol, targetTime);
             });
 
-            // -----------------------------
-            // 2. 初始化：下方即時走勢圖 (Area Chart)
-            // -----------------------------
+            // --- 2. 下方即時走勢圖 ---
             const intraContainer = document.getElementById('intraday-chart');
             
-            // 下方走勢圖專屬的價格追蹤器
             intradayTracker = document.createElement('div');
             intradayTracker.style = `position: absolute; display: none; z-index: 50; font-family: monospace; font-size: 13px; font-weight: bold; color: #ffffff; pointer-events: none; background: #e67e22; padding: 4px 8px; border-radius: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.4); transition: left 0.05s ease, top 0.05s ease;`;
             intraContainer.appendChild(intradayTracker);
@@ -248,7 +238,6 @@
                 height: intraContainer.clientHeight,
                 layout: { backgroundColor: 'transparent', textColor: '#8b949e' },
                 grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
-                // 時間軸顯示「時:分」
                 timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 5 },
                 crosshair: { mode: LightweightCharts.CrosshairMode.Normal }
             });
@@ -260,7 +249,6 @@
                 lineWidth: 2,
             });
 
-            // 下方圖表的防撞跟隨滑鼠邏輯
             intradayChart.subscribeCrosshairMove(param => {
                 if (param.point === undefined || !param.time || param.point.x < 0 || param.point.y < 0 || param.point.x > intraContainer.clientWidth || param.point.y > intraContainer.clientHeight) {
                     intradayTracker.style.display = 'none';
@@ -269,7 +257,6 @@
                     const exactPrice = intradaySeries.coordinateToPrice(param.point.y);
                     if (dataPrice !== undefined && exactPrice !== null) {
                         const lineY = intradaySeries.priceToCoordinate(dataPrice);
-                        // 給予 15px 的寬鬆觸碰判定
                         if (lineY !== null && param.point.y >= (lineY - 15) && param.point.y <= (lineY + 15)) {
                             intradayTracker.style.display = 'block';
                             intradayTracker.innerHTML = exactPrice.toFixed(2);
@@ -375,7 +362,7 @@
             
             candlestickSeries.setData([]); volumeSeries.setData([]);
             ma5Series.setData([]); ma20Series.setData([]); ma60Series.setData([]);
-            intradaySeries.setData([]); // 清空下方走勢圖
+            intradaySeries.setData([]); 
             
             window.globalChartData = []; window.globalVolData = [];
 
@@ -390,44 +377,71 @@
         async function fetchRealtimeSync() {
             if (!currentSymbol) return;
 
-            // 1. 更新上方日 K 線 (1d)
+            // 🌟 1. 修復上方報價：改用最穩定的 Yahoo Quote API
             if (window.globalChartData && window.globalChartData.length > 0) {
                 try {
-                    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${currentSymbol}.TW?interval=1d&range=1d`;
-                    const yData = await fetchSafe(yahooUrl, 5000);
-                    const result = yData.chart.result[0];
-                    const price = result.meta.regularMarketPrice; const vol = result.meta.regularMarketVolume || 0;
-                    const indicators = result.indicators.quote[0];
-                    const open = indicators.open[0] || price; const high = indicators.high[0] || price; const low = indicators.low[0] || price;
+                    // 直接查 Quote 比抓 Chart 穩定很多，不受換日影響
+                    const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${currentSymbol}.TW`;
+                    const qData = await fetchSafe(quoteUrl, 5000);
+                    const result = qData.quoteResponse.result[0];
                     
-                    document.getElementById('current-price').innerText = `$${price.toFixed(2)}`;
-                    const time = new Date().toISOString().split('T')[0];
-                    const newData = { time, open, high, low, close: price };
-                    candlestickSeries.update(newData);
-                    volumeSeries.update({ time, value: vol });
-                } catch (e) { console.log("日線同步略過"); }
+                    if (result) {
+                        const price = result.regularMarketPrice; 
+                        const vol = result.regularMarketVolume || 0;
+                        const open = result.regularMarketOpen || price; 
+                        const high = result.regularMarketDayHigh || price; 
+                        const low = result.regularMarketDayLow || price;
+                        
+                        document.getElementById('current-price').innerText = `$${price.toFixed(2)}`;
+                        
+                        // 將最新報價更新到 K 線圖最後一根
+                        const time = new Date().toISOString().split('T')[0];
+                        const newData = { time, open, high, low, close: price };
+                        candlestickSeries.update(newData);
+                        volumeSeries.update({ time, value: vol });
+                    }
+                } catch (e) { console.log("即時報價同步略過"); }
             }
 
-            // 🌟 2. 抓取並更新下方即時走勢 (1m 分鐘線)
+            // 🌟 2. 修復下方走勢圖：抓取 3 天資料，用程式自動切出「最後一個交易日」
             try {
-                const intraUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${currentSymbol}.TW?interval=1m&range=1d`;
-                const intraData = await fetchSafe(intraUrl, 5000);
+                // range 改為 3d 避免遇到週末或時差抓不到資料
+                const intraUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${currentSymbol}.TW?interval=1m&range=3d`;
+                const intraData = await fetchSafe(intraUrl, 8000);
                 const iResult = intraData.chart.result[0];
                 const t = iResult.timestamp;
                 const c = iResult.indicators.quote[0].close;
                 
-                if (t && c) {
+                if (t && c && t.length > 0) {
+                    // 找出整份資料最後一筆的時間，定義為「最後交易日」
+                    const lastDateStr = new Date(t[t.length - 1] * 1000).toDateString();
+
                     let iDataArr = [];
                     for (let i = 0; i < t.length; i++) {
                         if (c[i] !== null) {
-                            iDataArr.push({ time: t[i], value: c[i] });
+                            const pointDateStr = new Date(t[i] * 1000).toDateString();
+                            // 💡 關鍵過濾：只畫出跟「最後交易日」同一天的走勢
+                            if (pointDateStr === lastDateStr) {
+                                iDataArr.push({ time: t[i], value: c[i] });
+                            }
                         }
                     }
-                    intradaySeries.setData(iDataArr);
-                    document.getElementById('intraday-status').innerText = `📊 當日即時走勢 (1分K)`;
+                    
+                    if (iDataArr.length > 0) {
+                        intradaySeries.setData(iDataArr);
+                        
+                        // 更新浮水印顯示真正的資料日期
+                        const displayDate = new Date(iDataArr[0].time * 1000).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' });
+                        document.getElementById('intraday-status').innerText = `📊 即時走勢 (1分K) - ${displayDate}`;
+                    } else {
+                        throw new Error("無有效數據");
+                    }
+                } else {
+                    throw new Error("API 空值");
                 }
             } catch (e) {
-                document.getElementById('intraday-status').innerText = "⚠️ 即時走勢暫時無法載入";
+                console.error("Intraday Error:", e);
+                document.getElementById('intraday-status').innerText = "⚠️ 即時走勢暫時無法載入 (API 離線或無資料)";
             }
         }
 
