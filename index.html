@@ -5,7 +5,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>STOCKWATCH TERMINAL - 雙視角穩定版</title>
+    <title>STOCKWATCH TERMINAL - 穩定雙視角版</title>
     <style>
         * { box-sizing: border-box; }
         body { background-color: #0d1117; color: #d1d4dc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
@@ -165,7 +165,6 @@
         function initChart() {
             if (chart) return; 
 
-            // --- 1. 上方日 K 線圖 ---
             const mainContainer = document.getElementById('main-chart');
             
             chartLegend = document.createElement('div');
@@ -377,10 +376,9 @@
         async function fetchRealtimeSync() {
             if (!currentSymbol) return;
 
-            // 🌟 1. 修復上方報價：改用最穩定的 Yahoo Quote API
+            // 1. 更新上方日 K 線 (1d) & 頂部即時報價
             if (window.globalChartData && window.globalChartData.length > 0) {
                 try {
-                    // 直接查 Quote 比抓 Chart 穩定很多，不受換日影響
                     const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${currentSymbol}.TW`;
                     const qData = await fetchSafe(quoteUrl, 5000);
                     const result = qData.quoteResponse.result[0];
@@ -394,7 +392,6 @@
                         
                         document.getElementById('current-price').innerText = `$${price.toFixed(2)}`;
                         
-                        // 將最新報價更新到 K 線圖最後一根
                         const time = new Date().toISOString().split('T')[0];
                         const newData = { time, open, high, low, close: price };
                         candlestickSeries.update(newData);
@@ -403,24 +400,32 @@
                 } catch (e) { console.log("即時報價同步略過"); }
             }
 
-            // 🌟 2. 修復下方走勢圖：抓取 3 天資料，用程式自動切出「最後一個交易日」
+            // 🌟 2. 智慧彈性範圍：抓取並過濾下方即時走勢 (解決週末/長假空窗期)
             try {
-                // range 改為 3d 避免遇到週末或時差抓不到資料
-                const intraUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${currentSymbol}.TW?interval=1m&range=3d`;
-                const intraData = await fetchSafe(intraUrl, 8000);
+                // 第一步：先嘗試抓最近 1 天 (平時最快)
+                let intraUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${currentSymbol}.TW?interval=1m&range=1d`;
+                let intraData = await fetchSafe(intraUrl, 5000);
+                
+                // 第二步：如果 1 天沒資料 (例如週末)，自動拉長到 5 天！
+                if (!intraData.chart.result || intraData.chart.result[0].timestamp === undefined) {
+                    console.log("1d 範圍無資料，自動擴展至 5d 範圍...");
+                    intraUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${currentSymbol}.TW?interval=1m&range=5d`;
+                    intraData = await fetchSafe(intraUrl, 8000);
+                }
+
                 const iResult = intraData.chart.result[0];
                 const t = iResult.timestamp;
                 const c = iResult.indicators.quote[0].close;
                 
                 if (t && c && t.length > 0) {
-                    // 找出整份資料最後一筆的時間，定義為「最後交易日」
+                    // 找出整份資料最後一筆的時間，定義為「最後有開盤的交易日」
                     const lastDateStr = new Date(t[t.length - 1] * 1000).toDateString();
 
                     let iDataArr = [];
                     for (let i = 0; i < t.length; i++) {
                         if (c[i] !== null) {
                             const pointDateStr = new Date(t[i] * 1000).toDateString();
-                            // 💡 關鍵過濾：只畫出跟「最後交易日」同一天的走勢
+                            // 💡 智慧過濾：只畫出跟「最後交易日」同一天的走勢
                             if (pointDateStr === lastDateStr) {
                                 iDataArr.push({ time: t[i], value: c[i] });
                             }
@@ -430,7 +435,6 @@
                     if (iDataArr.length > 0) {
                         intradaySeries.setData(iDataArr);
                         
-                        // 更新浮水印顯示真正的資料日期
                         const displayDate = new Date(iDataArr[0].time * 1000).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' });
                         document.getElementById('intraday-status').innerText = `📊 即時走勢 (1分K) - ${displayDate}`;
                     } else {
@@ -441,7 +445,7 @@
                 }
             } catch (e) {
                 console.error("Intraday Error:", e);
-                document.getElementById('intraday-status').innerText = "⚠️ 即時走勢暫時無法載入 (API 離線或無資料)";
+                document.getElementById('intraday-status').innerText = "⚠️ 即時走勢暫時無法載入";
             }
         }
 
