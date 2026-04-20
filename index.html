@@ -5,7 +5,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>STOCKWATCH TERMINAL - 專業左上圖例版</title>
+    <title>STOCKWATCH TERMINAL - 雙動態指標版</title>
     <style>
         * { box-sizing: border-box; }
         body { background-color: #0d1117; color: #d1d4dc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
@@ -33,7 +33,7 @@
         .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; overflow: hidden; }
         .title-bar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
         
-        #chart-container { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; min-height: 0; position: relative; }
+        #chart-container { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; min-height: 0; position: relative; overflow: hidden; }
 
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -93,9 +93,10 @@
 
         let allStocks = [], defaultTop50List = [], currentSymbol = '';
         let chart, candlestickSeries, volumeSeries, ma5Series, ma20Series, ma60Series;
-        let chartLegend; 
         
-        // 🌟 儲存完整歷史數據，用來計算「昨日收盤價」與漲跌幅
+        let chartLegend;   // 左上角的詳細資訊
+        let priceTracker;  // 🌟 跟隨滑鼠的精確價格標籤
+        
         window.globalChartData = [];
         window.globalVolData = [];
 
@@ -116,38 +117,28 @@
         }
         setupMAToggles();
 
-        // 🌟 獨立出「渲染圖例」的函數，讓格式完全對齊你的截圖
+        // 渲染左上角的詳細資料
         function renderLegend(paramData, paramVol, paramTime) {
             if (!paramData || paramData.open === undefined) return;
             
             let timeStr = typeof paramTime === 'object' ? `${paramTime.year}-${String(paramTime.month).padStart(2,'0')}-${String(paramTime.day).padStart(2,'0')}` : paramTime;
 
-            // 尋找「前一天」的收盤價，用來計算漲跌幅
-            let prevClose = paramData.open; // 預設防呆
+            let prevClose = paramData.open; 
             if (window.globalChartData && window.globalChartData.length > 0) {
                 let idx = window.globalChartData.findIndex(x => x.time === timeStr || x.time === paramTime);
-                if (idx > 0) {
-                    prevClose = window.globalChartData[idx - 1].close;
-                }
+                if (idx > 0) prevClose = window.globalChartData[idx - 1].close;
             }
 
-            const o = paramData.open.toFixed(2);
-            const h = paramData.high.toFixed(2);
-            const l = paramData.low.toFixed(2);
-            const c = paramData.close.toFixed(2);
-            
-            // 計算漲跌與漲跌幅
+            const o = paramData.open.toFixed(2), h = paramData.high.toFixed(2), l = paramData.low.toFixed(2), c = paramData.close.toFixed(2);
             const changeVal = (paramData.close - prevClose);
             const changeStr = changeVal.toFixed(2);
             const changePct = ((changeVal / prevClose) * 100).toFixed(2);
             
-            // 決定顏色 (上漲綠、下跌紅)
             const candleColor = paramData.close >= paramData.open ? '#26a69a' : '#ef5350';
             const changeColor = changeVal >= 0 ? '#26a69a' : '#ef5350';
             const sign = changeVal > 0 ? '+' : '';
             const v = paramVol !== undefined ? (paramVol / 1000).toFixed(2) + 'K' : '--';
 
-            // 完全模擬 TradingView 的清爽排版 (無背景、純文字)
             chartLegend.innerHTML = `
                 <div style="font-size: 13px; margin-bottom: 6px; display: flex; align-items: center;">
                     <span style="margin-right: 12px; font-weight: bold; color: #d1d4dc;">${timeStr}</span>
@@ -167,7 +158,7 @@
             if (chart) return; 
             const container = document.getElementById('chart-container');
             
-            // 🌟 建立固定在左上角的無背景圖例
+            // 建立固定在左上角的詳細圖例
             chartLegend = document.createElement('div');
             chartLegend.style = `
                 position: absolute; left: 15px; top: 12px; z-index: 10; 
@@ -175,6 +166,19 @@
                 color: #8b949e; pointer-events: none; 
             `;
             container.appendChild(chartLegend);
+
+            // 🌟 建立跟著滑鼠跑的「精確價格標籤」
+            priceTracker = document.createElement('div');
+            priceTracker.style = `
+                position: absolute; display: none; z-index: 50; 
+                font-family: 'SF Pro Display', monospace; font-size: 13px; font-weight: bold;
+                color: #ffffff; pointer-events: none; 
+                background: #2962ff; /* 專業亮藍色 */
+                padding: 4px 8px; border-radius: 4px;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+                transition: left 0.05s ease, top 0.05s ease; /* 滑順跟隨 */
+            `;
+            container.appendChild(priceTracker);
 
             chart = LightweightCharts.createChart(container, {
                 width: container.clientWidth, 
@@ -194,25 +198,45 @@
             volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
             candlestickSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.3 } });
 
-            // 🌟 智慧判斷：如果滑鼠移開，就顯示最後一筆(最新)資料
+            // 🌟 雙動態指標：處理左上角詳細資料 ＋ 滑鼠精確價格
             chart.subscribeCrosshairMove(param => {
+                
+                // 1. 處理左上角的 K 棒詳細資料
                 let targetData, targetVol, targetTime;
-
-                if (param.point === undefined || !param.time || param.point.x < 0 || param.point.y < 0) {
-                    // 滑鼠移開，抓取陣列裡的最後一筆 (最新即時價)
+                if (param.point === undefined || !param.time || param.point.x < 0 || param.point.y < 0 || param.point.x > container.clientWidth || param.point.y > container.clientHeight) {
                     if (!window.globalChartData || window.globalChartData.length === 0) return;
                     const lastIdx = window.globalChartData.length - 1;
                     targetData = window.globalChartData[lastIdx];
                     targetVol = window.globalVolData[lastIdx] ? window.globalVolData[lastIdx].value : 0;
                     targetTime = targetData.time;
+                    
+                    // 滑鼠離開圖表時，隱藏跟隨標籤
+                    priceTracker.style.display = 'none';
                 } else {
-                    // 滑鼠懸停，抓取當前游標指到的 K 棒
                     targetData = param.seriesPrices.get(candlestickSeries);
                     const volObj = param.seriesPrices.get(volumeSeries);
                     targetVol = volObj !== undefined ? volObj : 0;
                     targetTime = param.time;
+                    
+                    // 🌟 2. 處理滑鼠旁邊的「精確價格追蹤器」
+                    // 把滑鼠所在的 Y 座標，精準轉換成價格數字
+                    const exactPrice = candlestickSeries.coordinateToPrice(param.point.y);
+                    if (exactPrice !== null) {
+                        priceTracker.style.display = 'block';
+                        priceTracker.innerHTML = exactPrice.toFixed(2); // 只顯示純粹的價格
+                        
+                        // 設定防撞偏移量，讓標籤出現在滑鼠右下方
+                        let left = param.point.x + 15;
+                        let top = param.point.y + 15;
+                        if (left + priceTracker.offsetWidth > container.clientWidth) left = param.point.x - priceTracker.offsetWidth - 10;
+                        if (top + priceTracker.offsetHeight > container.clientHeight) top = param.point.y - priceTracker.offsetHeight - 10;
+                        
+                        priceTracker.style.left = left + 'px';
+                        priceTracker.style.top = top + 'px';
+                    } else {
+                        priceTracker.style.display = 'none';
+                    }
                 }
-
                 renderLegend(targetData, targetVol, targetTime);
             });
         }
@@ -305,7 +329,6 @@
                         color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)' 
                     }));
                     
-                    // 寫入全域變數，供圖例計算使用
                     window.globalChartData = formatted;
                     window.globalVolData = volumeData;
 
@@ -317,7 +340,6 @@
                     
                     chart.timeScale().fitContent();
                     
-                    // 預設顯示最新一天的數據
                     if (formatted.length > 0) {
                         renderLegend(formatted[formatted.length-1], volumeData[volumeData.length-1].value, formatted[formatted.length-1].time);
                     }
@@ -335,6 +357,7 @@
             document.getElementById('current-price').innerText = "---";
             
             if (chartLegend) chartLegend.innerHTML = '<span style="color:#8b949e;">載入資料中...</span>';
+            if (priceTracker) priceTracker.style.display = 'none';
             
             candlestickSeries.setData([]); volumeSeries.setData([]);
             ma5Series.setData([]); ma20Series.setData([]); ma60Series.setData([]);
@@ -375,7 +398,6 @@
                 candlestickSeries.update(newData);
                 volumeSeries.update({ time, value: vol });
                 
-                // 更新全域數據
                 const lastIdx = window.globalChartData.length - 1;
                 if (window.globalChartData[lastIdx].time === time) {
                     window.globalChartData[lastIdx] = newData;
