@@ -5,7 +5,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>STOCKWATCH TERMINAL - 內嵌圖例版</title>
+    <title>STOCKWATCH TERMINAL - 終極互動修復版</title>
     <style>
         * { box-sizing: border-box; }
         body { background-color: #0d1117; color: #d1d4dc; font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
@@ -33,7 +33,7 @@
         .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; overflow: hidden; }
         .title-bar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
         
-        /* 🌟 圖表容器設為 relative，讓圖例可以精準定位在裡面 */
+        /* 圖表容器設為 relative，讓圖例可以精準定位 */
         #chart-container { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; min-height: 0; position: relative; }
 
         ::-webkit-scrollbar { width: 6px; }
@@ -95,7 +95,7 @@
 
         let allStocks = [], defaultTop50List = [], currentSymbol = '';
         let chart, candlestickSeries, volumeSeries, ma5Series, ma20Series, ma60Series;
-        let chartLegend; // 🌟 宣告內嵌圖例變數
+        let chartLegend; 
 
         function setupMAToggles() {
             const toggles = [
@@ -118,7 +118,7 @@
             if (chart) return; 
             const container = document.getElementById('chart-container');
             
-            // 🌟 建立官方推薦的內嵌式圖例 (TradingView Style)
+            // 建立內嵌式圖例 (TradingView Style)
             chartLegend = document.createElement('div');
             chartLegend.style = `
                 position: absolute; left: 12px; top: 12px; z-index: 10; 
@@ -133,7 +133,7 @@
             chart = LightweightCharts.createChart(container, {
                 width: container.clientWidth, 
                 height: container.clientHeight,
-                layout: { backgroundColor: 'transparent', textColor: '#d1d4dc' }, // 背景改透明，透出容器顏色
+                layout: { backgroundColor: 'transparent', textColor: '#d1d4dc' },
                 grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
                 timeScale: { rightOffset: 5, barSpacing: 6 },
                 crosshair: { mode: LightweightCharts.CrosshairMode.Normal }
@@ -148,15 +148,16 @@
             volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
             candlestickSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.3 } });
 
-            // 🌟 綁定滑鼠移動事件更新內嵌圖例
+            // 🌟 修復核心：改用 v3.8.0 正確的 seriesPrices 語法
             chart.subscribeCrosshairMove(param => {
                 if (param.point === undefined || !param.time || param.point.x < 0 || param.point.y < 0) {
-                    chartLegend.style.display = 'none'; // 滑鼠移開時隱藏
+                    chartLegend.style.display = 'none'; 
                     return;
                 }
 
-                const data = param.seriesData.get(candlestickSeries);
-                const volData = param.seriesData.get(volumeSeries);
+                // 在 3.8.0 版本中，抓取游標資料要用 seriesPrices
+                const data = param.seriesPrices.get(candlestickSeries);
+                const vol = param.seriesPrices.get(volumeSeries);
 
                 if (data && data.open !== undefined) {
                     chartLegend.style.display = 'block';
@@ -168,7 +169,8 @@
 
                     const o = data.open.toFixed(2), h = data.high.toFixed(2), l = data.low.toFixed(2), c = data.close.toFixed(2);
                     const color = data.close >= data.open ? '#26a69a' : '#ef5350';
-                    const v = volData ? (volData.value / 1000).toFixed(0) + 'K' : '--';
+                    // 成交量在 v3 中直接回傳數值，而不是物件
+                    const v = vol !== undefined ? (vol / 1000).toFixed(0) + 'K' : '--';
 
                     chartLegend.innerHTML = `
                         <span style="font-weight:bold; margin-right: 15px;">📅 ${dateStr}</span>
@@ -292,7 +294,7 @@
             document.getElementById('current-title').innerText = `${code} ${name}`;
             document.getElementById('current-price').innerText = "---";
             
-            if (chartLegend) chartLegend.style.display = 'none'; // 換股時隱藏資訊框
+            if (chartLegend) chartLegend.style.display = 'none'; 
             
             candlestickSeries.setData([]); volumeSeries.setData([]);
             ma5Series.setData([]); ma20Series.setData([]); ma60Series.setData([]);
