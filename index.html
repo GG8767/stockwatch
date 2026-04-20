@@ -5,7 +5,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>STOCKWATCH TERMINAL - 雙動態指標版</title>
+    <title>STOCKWATCH TERMINAL - 實體觸發版</title>
     <style>
         * { box-sizing: border-box; }
         body { background-color: #0d1117; color: #d1d4dc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
@@ -94,8 +94,8 @@
         let allStocks = [], defaultTop50List = [], currentSymbol = '';
         let chart, candlestickSeries, volumeSeries, ma5Series, ma20Series, ma60Series;
         
-        let chartLegend;   // 左上角的詳細資訊
-        let priceTracker;  // 🌟 跟隨滑鼠的精確價格標籤
+        let chartLegend;   
+        let priceTracker;  
         
         window.globalChartData = [];
         window.globalVolData = [];
@@ -117,7 +117,6 @@
         }
         setupMAToggles();
 
-        // 渲染左上角的詳細資料
         function renderLegend(paramData, paramVol, paramTime) {
             if (!paramData || paramData.open === undefined) return;
             
@@ -158,7 +157,6 @@
             if (chart) return; 
             const container = document.getElementById('chart-container');
             
-            // 建立固定在左上角的詳細圖例
             chartLegend = document.createElement('div');
             chartLegend.style = `
                 position: absolute; left: 15px; top: 12px; z-index: 10; 
@@ -167,16 +165,15 @@
             `;
             container.appendChild(chartLegend);
 
-            // 🌟 建立跟著滑鼠跑的「精確價格標籤」
+            // 藍色價格標籤
             priceTracker = document.createElement('div');
             priceTracker.style = `
                 position: absolute; display: none; z-index: 50; 
                 font-family: 'SF Pro Display', monospace; font-size: 13px; font-weight: bold;
                 color: #ffffff; pointer-events: none; 
-                background: #2962ff; /* 專業亮藍色 */
+                background: #2962ff; 
                 padding: 4px 8px; border-radius: 4px;
                 box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-                transition: left 0.05s ease, top 0.05s ease; /* 滑順跟隨 */
             `;
             container.appendChild(priceTracker);
 
@@ -198,11 +195,10 @@
             volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
             candlestickSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.3 } });
 
-            // 🌟 雙動態指標：處理左上角詳細資料 ＋ 滑鼠精確價格
             chart.subscribeCrosshairMove(param => {
-                
-                // 1. 處理左上角的 K 棒詳細資料
                 let targetData, targetVol, targetTime;
+
+                // 若移出圖表
                 if (param.point === undefined || !param.time || param.point.x < 0 || param.point.y < 0 || param.point.x > container.clientWidth || param.point.y > container.clientHeight) {
                     if (!window.globalChartData || window.globalChartData.length === 0) return;
                     const lastIdx = window.globalChartData.length - 1;
@@ -210,7 +206,6 @@
                     targetVol = window.globalVolData[lastIdx] ? window.globalVolData[lastIdx].value : 0;
                     targetTime = targetData.time;
                     
-                    // 滑鼠離開圖表時，隱藏跟隨標籤
                     priceTracker.style.display = 'none';
                 } else {
                     targetData = param.seriesPrices.get(candlestickSeries);
@@ -218,21 +213,33 @@
                     targetVol = volObj !== undefined ? volObj : 0;
                     targetTime = param.time;
                     
-                    // 🌟 2. 處理滑鼠旁邊的「精確價格追蹤器」
-                    // 把滑鼠所在的 Y 座標，精準轉換成價格數字
+                    // 🌟 核心修改：判斷滑鼠是否在 K 棒實體/影線的「高度範圍內」
                     const exactPrice = candlestickSeries.coordinateToPrice(param.point.y);
-                    if (exactPrice !== null) {
-                        priceTracker.style.display = 'block';
-                        priceTracker.innerHTML = exactPrice.toFixed(2); // 只顯示純粹的價格
+                    
+                    if (targetData && exactPrice !== null) {
+                        // 取得這根 K 棒最高價與最低價的 Y 軸座標
+                        const highY = candlestickSeries.priceToCoordinate(targetData.high);
+                        const lowY = candlestickSeries.priceToCoordinate(targetData.low);
                         
-                        // 設定防撞偏移量，讓標籤出現在滑鼠右下方
-                        let left = param.point.x + 15;
-                        let top = param.point.y + 15;
-                        if (left + priceTracker.offsetWidth > container.clientWidth) left = param.point.x - priceTracker.offsetWidth - 10;
-                        if (top + priceTracker.offsetHeight > container.clientHeight) top = param.point.y - priceTracker.offsetHeight - 10;
-                        
-                        priceTracker.style.left = left + 'px';
-                        priceTracker.style.top = top + 'px';
+                        // Y軸座標越小代表位置越高，所以最高價的Y值會小於最低價的Y值
+                        // 給予 5px 的滑鼠容錯範圍
+                        if (highY !== null && lowY !== null && 
+                            param.point.y >= (highY - 5) && param.point.y <= (lowY + 5)) {
+                            
+                            priceTracker.style.display = 'block';
+                            priceTracker.innerHTML = exactPrice.toFixed(2); 
+                            
+                            let left = param.point.x + 15;
+                            let top = param.point.y + 15;
+                            if (left + priceTracker.offsetWidth > container.clientWidth) left = param.point.x - priceTracker.offsetWidth - 10;
+                            if (top + priceTracker.offsetHeight > container.clientHeight) top = param.point.y - priceTracker.offsetHeight - 10;
+                            
+                            priceTracker.style.left = left + 'px';
+                            priceTracker.style.top = top + 'px';
+                        } else {
+                            // 滑鼠移出 K 棒的上下範圍，隱藏價格標籤
+                            priceTracker.style.display = 'none';
+                        }
                     } else {
                         priceTracker.style.display = 'none';
                     }
