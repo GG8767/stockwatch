@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>STOCKWATCH TERMINAL - 極簡全螢幕版</title>
+    <title>STOCKWATCH TERMINAL - 互動浮窗版</title>
     <style>
         /* --- 專業金融介面：深色高對比 --- */
         * { box-sizing: border-box; }
@@ -10,7 +10,12 @@
 
         .header { position: absolute; top: 0; width: 100%; height: 40px; background: rgba(22, 27, 34, 0.9); border-bottom: 1px solid #30363d; display: flex; align-items: center; padding: 0 20px; font-size: 11px; z-index: 100; }
         .header .logo { color: #ff9800; font-weight: bold; letter-spacing: 2px; margin-right: 20px; }
-        .ma-legend { display: flex; gap: 15px; font-size: 10px; }
+        
+        /* 🌟 均線開關樣式優化 */
+        .ma-legend { display: flex; gap: 15px; font-size: 11px; }
+        .ma-toggle { cursor: pointer; display: flex; align-items: center; gap: 5px; user-select: none; opacity: 0.9; transition: 0.2s; }
+        .ma-toggle:hover { opacity: 1; filter: brightness(1.2); }
+        .ma-checkbox { cursor: pointer; accent-color: #58a6ff; width: 12px; height: 12px; margin: 0; }
 
         .status { margin-left: auto; display: flex; align-items: center; cursor: pointer; padding: 5px 10px; border-radius: 4px; transition: 0.2s; }
         .status:hover { background: rgba(255,255,255,0.1); }
@@ -24,10 +29,26 @@
         .stock-item:hover { background: #21262d; }
         .stock-item.active { border: 1px solid #58a6ff; background: #1c2128; }
 
-        /* 右側核心圖表 - 改為 flex: 1 讓圖表自動填滿剩餘高度 */
         .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; overflow: hidden; }
         .title-bar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
-        #chart-container { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; min-height: 0; }
+        
+        /* 🌟 圖表容器與浮動資訊框 */
+        #chart-wrapper { flex: 1; position: relative; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; overflow: hidden; }
+        #chart-container { width: 100%; height: 100%; }
+        
+        .floating-tooltip {
+            position: absolute; top: 12px; left: 15px; z-index: 10;
+            background: rgba(22, 27, 34, 0.85); backdrop-filter: blur(4px);
+            border: 1px solid #30363d; border-radius: 6px; padding: 8px 12px;
+            font-size: 13px; font-family: 'SF Pro Display', 'Segoe UI', monospace;
+            pointer-events: none; display: none; /* 預設隱藏，滑鼠移入才顯示 */
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .tooltip-row { display: flex; gap: 12px; margin-top: 4px; }
+        .tooltip-label { color: #8b949e; }
+        .val-up { color: #26a69a; font-weight: bold; }
+        .val-down { color: #ef5350; font-weight: bold; }
+        .val-flat { color: #d1d4dc; font-weight: bold; }
 
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -40,8 +61,16 @@
     <div class="header">
         <span class="logo">STOCKWATCH TERMINAL</span>
         <div class="ma-legend">
-            <span style="color:#f1c40f">● MA5</span><span style="color:#9b59b6">● MA20</span><span style="color:#e67e22">● MA60</span>
-            <span style="color:#26a69a; margin-left:10px;">📊 成交量</span>
+            <label class="ma-toggle" style="color:#f1c40f">
+                <input type="checkbox" class="ma-checkbox" id="toggle-ma5" checked> MA5
+            </label>
+            <label class="ma-toggle" style="color:#9b59b6">
+                <input type="checkbox" class="ma-checkbox" id="toggle-ma20" checked> MA20
+            </label>
+            <label class="ma-toggle" style="color:#e67e22">
+                <input type="checkbox" class="ma-checkbox" id="toggle-ma60" checked> MA60
+            </label>
+            <span style="color:#26a69a; margin-left:10px; opacity:0.8;">📊 成交量</span>
         </div>
         <div class="status" onclick="initStockDatabase()" title="點擊強制重新連線">
             <div class="dot" id="status-dot"></div>
@@ -59,16 +88,16 @@
             <h2 id="current-title" style="margin: 0; color: white; font-weight: 500;">請選擇標的</h2>
             <h2 id="current-price" style="margin: 0; color: #58a6ff; font-weight: bold; letter-spacing: 1px;"></h2>
         </div>
-        <div id="chart-container"></div>
+        <div id="chart-wrapper">
+            <div id="chart-tooltip" class="floating-tooltip"></div>
+            <div id="chart-container"></div>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
 
     <script>
-        window.onerror = function(msg, src, lineno) {
-            console.error("Error:", msg, "at line:", lineno);
-            return true;
-        };
+        window.onerror = function(msg, src, lineno) { console.error("Error:", msg, "at line:", lineno); return true; };
 
         async function fetchSafe(url, timeoutMs = 8000) {
             const controller = new AbortController();
@@ -90,23 +119,17 @@
         let allStocks = [], defaultTop50List = [], currentSymbol = '';
         let chart, candlestickSeries, volumeSeries, ma5Series, ma20Series, ma60Series;
 
-        const fallbackStocks = [
-            {Code: "0050", Name: "元大台灣50", Market: "ETF"}, {Code: "00878", Name: "國泰永續高股息", Market: "ETF"},
-            {Code: "2330", Name: "台積電", Market: "上市"}, {Code: "2409", Name: "友達", Market: "上市"}, 
-            {Code: "2317", Name: "鴻海", Market: "上市"}, {Code: "2454", Name: "聯發科", Market: "上市"}
-        ];
-
         function initChart() {
             if (chart) return; 
             const container = document.getElementById('chart-container');
             
-            // 圖表高度現在會自動填滿容器
             chart = LightweightCharts.createChart(container, {
                 width: container.clientWidth, 
                 height: container.clientHeight,
-                layout: { backgroundColor: '#0d1117', textColor: '#d1d4dc' },
+                layout: { backgroundColor: 'transparent', textColor: '#d1d4dc' }, // 背景改透明，交給 wrapper
                 grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
-                timeScale: { rightOffset: 5, barSpacing: 6 } 
+                timeScale: { rightOffset: 5, barSpacing: 6 },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal } // 確保十字線模式為一般模式
             });
 
             candlestickSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350' });
@@ -117,7 +140,64 @@
 
             volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
             candlestickSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.3 } });
+
+            // 🌟 加入十字線懸停事件 (Crosshair Move Event)
+            chart.subscribeCrosshairMove(param => {
+                const tooltip = document.getElementById('chart-tooltip');
+                
+                // 如果滑鼠移出圖表，或者沒有時間資料，就隱藏浮窗
+                if (param.point === undefined || !param.time || param.point.x < 0 || param.point.x > container.clientWidth || param.point.y < 0 || param.point.y > container.clientHeight) {
+                    tooltip.style.display = 'none';
+                    return;
+                }
+
+                // 獲取當前指到的 K 棒和成交量數據
+                const data = param.seriesData.get(candlestickSeries);
+                const volData = param.seriesData.get(volumeSeries);
+                
+                if (data) {
+                    tooltip.style.display = 'block';
+                    
+                    const open = data.open.toFixed(2);
+                    const high = data.high.toFixed(2);
+                    const low = data.low.toFixed(2);
+                    const close = data.close.toFixed(2);
+                    // 判斷漲跌顏色
+                    let colorClass = 'val-flat';
+                    if (data.close > data.open) colorClass = 'val-up';
+                    else if (data.close < data.open) colorClass = 'val-down';
+
+                    // 處理成交量顯示 (轉換為千張或張)
+                    let volStr = "---";
+                    if (volData) {
+                        volStr = (volData.value / 1000).toFixed(0) + " K"; 
+                    }
+
+                    // 渲染浮窗 HTML
+                    tooltip.innerHTML = `
+                        <div style="color: white; font-weight: bold; margin-bottom: 4px;">📅 ${param.time}</div>
+                        <div class="tooltip-row">
+                            <span><span class="tooltip-label">開:</span> <span class="${colorClass}">${open}</span></span>
+                            <span><span class="tooltip-label">高:</span> <span class="${colorClass}">${high}</span></span>
+                            <span><span class="tooltip-label">低:</span> <span class="${colorClass}">${low}</span></span>
+                            <span><span class="tooltip-label">收:</span> <span class="${colorClass}">${close}</span></span>
+                            <span style="margin-left: 5px;"><span class="tooltip-label">量:</span> <span style="color:#58a6ff; font-weight:bold;">${volStr}</span></span>
+                        </div>
+                    `;
+                }
+            });
         }
+
+        // 🌟 綁定均線開關事件
+        document.getElementById('toggle-ma5').addEventListener('change', (e) => {
+            if (ma5Series) ma5Series.applyOptions({ visible: e.target.checked });
+        });
+        document.getElementById('toggle-ma20').addEventListener('change', (e) => {
+            if (ma20Series) ma20Series.applyOptions({ visible: e.target.checked });
+        });
+        document.getElementById('toggle-ma60').addEventListener('change', (e) => {
+            if (ma60Series) ma60Series.applyOptions({ visible: e.target.checked });
+        });
 
         function calculateSMA(data, count) {
             const avg = [];
@@ -157,20 +237,14 @@
                     defaultTop50List = allStocks.filter(s => top50Codes.includes(s.Code));
                     defaultTop50List.sort((a, b) => (a.Market === 'ETF' ? -1 : 1));
                     
-                    btn.innerText = `✅ 系統就緒 (${allStocks.length} 檔)`;
+                    btn.innerText = `✅ 系統就緒`;
                     dot.style.background = "#238636";
                     renderStockList(defaultTop50List, true);
-                } else {
-                    throw new Error("無數據");
                 }
             } catch (err) {
-                btn.innerText = "⚠️ 網路異常，載入備用清單";
+                btn.innerText = "⚠️ 網路異常，重試中";
                 dot.style.background = "#f85149";
-                allStocks = fallbackStocks;
-                renderStockList(allStocks, true);
             }
-            
-            // 延遲一點點初始化圖表，確保 DOM 已經算好高度
             setTimeout(initChart, 100);
         }
 
@@ -196,20 +270,10 @@
                 </div>
                 `;
             }).join('');
-
-            if (isHomePage && allStocks.length > 0) {
-                html += `<div style="text-align:center; opacity:0.4; padding: 15px 0; font-size:12px;">👆 熱門 ETF 與權值股<br>搜尋其他標的請使用上方搜尋框</div>`;
-            } else if (list.length > 50) {
-                html += `<div style="text-align:center; opacity:0.4; padding: 15px 0; font-size:12px;">...隱藏其餘標的，請繼續輸入以精確搜尋</div>`;
-            }
-
             document.getElementById('stock-list').innerHTML = html;
         }
 
         async function loadOneYearHistory(symbol) {
-            const btn = document.getElementById('update-time');
-            btn.innerText = "⏳ 讀取歷史 K 線中...";
-            
             const startDate = new Date();
             startDate.setMonth(startDate.getMonth() - 14);
             const finMindUrl = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${symbol}&start_date=${startDate.toISOString().split('T')[0]}`;
@@ -230,11 +294,8 @@
                     ma60Series.setData(calculateSMA(formatted, 60));
                     
                     chart.timeScale().fitContent();
-                    btn.innerText = "✅ 歷史載入成功，啟動即時報價";
                 }
-            } catch (e) {
-                btn.innerText = "❌ 歷史資料庫連線超時";
-            }
+            } catch (e) { console.error("歷史資料載入失敗"); }
         }
 
         async function selectStock(code, name) {
@@ -242,18 +303,12 @@
             document.getElementById('current-title').innerText = `${code} ${name}`;
             document.getElementById('current-price').innerText = "---";
             
-            candlestickSeries.setData([]);
-            volumeSeries.setData([]);
-            ma5Series.setData([]);
-            ma20Series.setData([]);
-            ma60Series.setData([]);
+            candlestickSeries.setData([]); volumeSeries.setData([]);
+            ma5Series.setData([]); ma20Series.setData([]); ma60Series.setData([]);
 
             const keyword = document.getElementById('search-input').value.trim().toLowerCase();
-            if (keyword === "") {
-                renderStockList(defaultTop50List, true);
-            } else {
-                renderStockList(allStocks.filter(s => s.Code.includes(keyword) || s.Name.includes(keyword)));
-            }
+            if (keyword === "") renderStockList(defaultTop50List, true);
+            else renderStockList(allStocks.filter(s => s.Code.includes(keyword) || s.Name.includes(keyword)));
             
             await loadOneYearHistory(code);
             await fetchRealtimeSync();
@@ -261,14 +316,10 @@
 
         async function fetchRealtimeSync() {
             if (!currentSymbol) return;
-            const stockInfo = allStocks.find(x => x.Code === currentSymbol);
-            if (!stockInfo) return;
-
             let price = 0, open = 0, high = 0, low = 0, vol = 0;
 
             try {
-                const yahooSymbol = `${currentSymbol}.TW`;
-                const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=1d`;
+                const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${currentSymbol}.TW?interval=1d&range=1d`;
                 const yData = await fetchSafe(yahooUrl, 5000);
                 const result = yData.chart.result[0];
                 price = result.meta.regularMarketPrice; vol = result.meta.regularMarketVolume || 0;
@@ -283,9 +334,7 @@
             }
 
             if (price > 0) {
-                // 將即時價格顯示在標題列右側
                 document.getElementById('current-price').innerText = `$${price.toFixed(2)}`;
-                
                 const time = new Date().toISOString().split('T')[0];
                 candlestickSeries.update({ time, open, high, low, close: price });
                 volumeSeries.update({ time, value: vol });
@@ -294,17 +343,13 @@
 
         document.getElementById('search-input').addEventListener('input', (e) => {
             const k = e.target.value.trim().toLowerCase();
-            if (k === '') {
-                renderStockList(defaultTop50List, true);
-            } else {
-                renderStockList(allStocks.filter(s => s.Code.includes(k) || s.Name.includes(k)));
-            }
+            if (k === '') renderStockList(defaultTop50List, true);
+            else renderStockList(allStocks.filter(s => s.Code.includes(k) || s.Name.includes(k)));
         });
 
         initStockDatabase();
         setInterval(fetchRealtimeSync, 30000);
         
-        // RWD 視窗縮放時，圖表會自動跟著新高度調整
         window.onresize = () => { 
             if(chart) {
                 const container = document.getElementById('chart-container');
