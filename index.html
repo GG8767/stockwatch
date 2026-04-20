@@ -5,7 +5,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>STOCKWATCH TERMINAL - 旗艦專業版 2.0</title>
+    <title>STOCKWATCH TERMINAL - 記憶與布林通道版</title>
     <style>
         * { box-sizing: border-box; }
         body { background-color: #0d1117; color: #d1d4dc; font-family: 'Segoe UI', -apple-system, sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
@@ -59,6 +59,7 @@
             <span class="ma-toggle" id="toggle-ma5" style="color:#f1c40f">● MA5</span>
             <span class="ma-toggle" id="toggle-ma20" style="color:#9b59b6">● MA20</span>
             <span class="ma-toggle" id="toggle-ma60" style="color:#e67e22">● MA60</span>
+            <span class="ma-toggle" id="toggle-bb" style="color:#00bcd4; margin-left: 10px;">● 布林通道 (BB)</span>
         </div>
         <div class="status"><div class="dot"></div>系統連線中</div>
     </div>
@@ -70,7 +71,7 @@
 
     <div class="right-panel">
         <div class="title-bar">
-            <h2 id="current-title" style="margin: 0; color: white; font-weight: 600; font-size: 24px;">請選擇標的</h2>
+            <h2 id="current-title" style="margin: 0; color: white; font-weight: 600; font-size: 24px;">初始化中...</h2>
             <div id="current-price-area" style="text-align: right;">
                 <div id="current-price" style="font-size: 28px; font-weight: bold; color: #58a6ff;">---</div>
                 <div id="current-change" style="font-size: 14px; font-weight: bold;">-- (--)</div>
@@ -82,11 +83,11 @@
             <div id="intraday-chart">
                 <div class="intraday-header">
                     <select id="intraday-range" class="range-select">
-                        <option value="1d" selected>當日</option>
+                        <option value="1d">當日</option>
                         <option value="5d">五日</option>
                         <option value="1mo">近月</option>
                     </select>
-                    <span id="intraday-status" style="font-size:12px; color:#8b949e; font-weight:bold;">📊 初始化走勢...</span>
+                    <span id="intraday-status" style="font-size:12px; color:#8b949e; font-weight:bold;">📊 準備載入...</span>
                 </div>
             </div>
         </div>
@@ -110,7 +111,22 @@
     <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
 
     <script>
-        // 🌟 修復日期顯示邏輯
+        // 🌟 1. 個人化記憶系統 (LocalStorage)
+        const PREFS_KEY = 'stockwatch_prefs';
+        let userPrefs = JSON.parse(localStorage.getItem(PREFS_KEY)) || {
+            symbol: '2330', name: '台積電', // 預設看台積電
+            ma5: true, ma20: true, ma60: true, bb: false, // 預設關閉布林通道
+            range: '1d'
+        };
+
+        function savePrefs() {
+            localStorage.setItem(PREFS_KEY, JSON.stringify(userPrefs));
+        }
+
+        // 初始化下拉選單狀態
+        document.getElementById('intraday-range').value = userPrefs.range;
+
+        // 基礎函數
         function formatDisplayTime(t) {
             if (!t) return "--";
             if (typeof t === 'object' && t.year) {
@@ -119,36 +135,54 @@
             return t;
         }
 
-        // 🌟 強化版三級跳 Fetch：Direct -> AllOrigins -> ThingProxy
         async function fetchUltraResilient(url, timeoutMs = 8000) {
-            // 第一跳：嘗試直接連線
             try {
                 const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
                 if (response.ok) return await response.json();
-            } catch (e) { console.warn("Direct fetch failed, trying Proxy 1..."); }
-
-            // 第二跳：AllOrigins 轉機
+            } catch (e) { console.warn("Direct fetch failed, trying Proxy..."); }
             try {
-                const proxyUrl1 = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-                const response = await fetch(proxyUrl1, { signal: AbortSignal.timeout(timeoutMs + 2000) });
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+                const response = await fetch(proxyUrl, { signal: AbortSignal.timeout(timeoutMs + 2000) });
                 if (response.ok) {
                     const data = await response.json();
                     return JSON.parse(data.contents);
                 }
-            } catch (e) { console.warn("Proxy 1 failed, trying Proxy 2..."); }
-
-            // 第三跳：ThingProxy 轉機
-            try {
-                const proxyUrl2 = `https://thingproxy.freeboard.io/fetch/${url}`;
-                const response = await fetch(proxyUrl2, { signal: AbortSignal.timeout(timeoutMs + 4000) });
-                if (response.ok) return await response.json();
             } catch (e) { throw new Error("All fetching paths failed."); }
         }
 
-        const top50Codes = ["0050", "0056", "00878", "00919", "00929", "2330", "2317", "2454", "2382", "2308", "2881", "2882", "2603", "2409", "3231", "2344", "2303", "2891", "1301", "2002", "2412", "1216", "2886", "2884", "2618", "2609", "3481", "2356", "2379", "3034", "3037", "3008", "2353", "2357", "2324", "3661", "6415", "3017", "2395", "2376", "2449", "2362", "2385", "3293", "6274"];
+        const top50Codes = ["0050", "0056", "00878", "00919", "00929", "00713", "006208", "2330", "2317", "2454", "2382", "2308", "2881", "2882", "2603", "2409", "3231", "2344", "2303", "2891", "1301", "2002", "2412", "1216", "2886", "2884", "2618", "2609", "3481", "2356", "2379", "3034", "3037", "3008", "2353", "2357", "2324", "3661", "6415", "3017", "2395", "2376", "2449", "2362", "2385", "3293", "6274"];
         let allStocks = [], currentSymbol = '', globalChartData = [];
         let chart, candleSeries, volumeSeries, ma5, ma20, ma60, legend;
+        let bbUpper, bbLower; // 🌟 布林通道物件
         let intraChart, intraSeries, intraVolSeries;
+
+        function setupToggles() {
+            const toggles = [
+                { id: 'toggle-ma5', key: 'ma5', series: () => [ma5] },
+                { id: 'toggle-ma20', key: 'ma20', series: () => [ma20] },
+                { id: 'toggle-ma60', key: 'ma60', series: () => [ma60] },
+                { id: 'toggle-bb', key: 'bb', series: () => [bbUpper, bbLower] }
+            ];
+
+            toggles.forEach(t => {
+                const el = document.getElementById(t.id);
+                // 根據記憶設定初始按鈕樣式
+                if (!userPrefs[t.key]) el.classList.add('disabled');
+                
+                el.addEventListener('click', function() {
+                    this.classList.toggle('disabled');
+                    const isVisible = !this.classList.contains('disabled');
+                    
+                    // 儲存至記憶體
+                    userPrefs[t.key] = isVisible;
+                    savePrefs();
+
+                    // 套用顯示/隱藏
+                    const sArr = t.series();
+                    sArr.forEach(s => { if (s) s.applyOptions({ visible: isVisible }); });
+                });
+            });
+        }
 
         function initChart() {
             if (chart) return;
@@ -157,21 +191,37 @@
             legend.style = `position: absolute; left: 15px; top: 12px; z-index: 10; font-family: monospace; font-size: 13px; color: #8b949e; pointer-events: none;`;
             mainBox.appendChild(legend);
 
+            const priceTracker = document.createElement('div');
+            priceTracker.style = `position: absolute; display: none; z-index: 50; font-family: monospace; font-size: 13px; font-weight: bold; color: #ffffff; pointer-events: none; background: #2962ff; padding: 4px 8px; border-radius: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.4);`;
+            mainBox.appendChild(priceTracker);
+
             chart = LightweightCharts.createChart(mainBox, {
                 width: mainBox.clientWidth, height: mainBox.clientHeight,
                 layout: { backgroundColor: 'transparent', textColor: '#d1d4dc' },
                 grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
                 timeScale: { rightOffset: 5, barSpacing: 6 },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal }
             });
 
             candleSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350' });
-            ma5 = chart.addLineSeries({ color: '#f1c40f', lineWidth: 1 });
-            ma20 = chart.addLineSeries({ color: '#9b59b6', lineWidth: 1 });
-            ma60 = chart.addLineSeries({ color: '#e67e22', lineWidth: 1.5 });
+            
+            // 初始化均線 (讀取記憶)
+            ma5 = chart.addLineSeries({ color: '#f1c40f', lineWidth: 1, visible: userPrefs.ma5 });
+            ma20 = chart.addLineSeries({ color: '#9b59b6', lineWidth: 1, visible: userPrefs.ma20 });
+            ma60 = chart.addLineSeries({ color: '#e67e22', lineWidth: 1.5, visible: userPrefs.ma60 });
+            
+            // 🌟 初始化布林通道 (虛線樣式，讀取記憶)
+            bbUpper = chart.addLineSeries({ color: 'rgba(0, 188, 212, 0.6)', lineWidth: 1, lineStyle: 2, visible: userPrefs.bb });
+            bbLower = chart.addLineSeries({ color: 'rgba(0, 188, 212, 0.6)', lineWidth: 1, lineStyle: 2, visible: userPrefs.bb });
+
             volumeSeries = chart.addHistogramSeries({ color: '#26a69a', priceFormat: { type: 'volume' }, priceScaleId: '' });
             volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
 
             const intraBox = document.getElementById('intraday-chart');
+            const intraTracker = document.createElement('div');
+            intraTracker.style = `position: absolute; display: none; z-index: 50; font-family: monospace; font-size: 13px; font-weight: bold; color: #ffffff; pointer-events: none; background: #e67e22; padding: 4px 8px; border-radius: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.4);`;
+            intraBox.appendChild(intraTracker);
+
             intraChart = LightweightCharts.createChart(intraBox, {
                 width: intraBox.clientWidth, height: intraBox.clientHeight,
                 layout: { backgroundColor: 'transparent', textColor: '#8b949e' },
@@ -182,11 +232,39 @@
             intraVolSeries = intraChart.addHistogramSeries({ color: 'rgba(88, 166, 255, 0.5)', priceFormat: { type: 'volume' }, priceScaleId: '' });
             intraVolSeries.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0 } });
 
+            // 滑鼠跟隨邏輯
             chart.subscribeCrosshairMove(param => {
-                if (!param.point || !param.time) { updateLegend(globalChartData[globalChartData.length-1]); return; }
-                const d = param.seriesPrices.get(candleSeries);
-                if(d) updateLegend({...d, time: param.time});
+                if (!param.point || !param.time || param.point.x < 0 || param.point.y < 0) {
+                    if (globalChartData.length > 0) updateLegend(globalChartData[globalChartData.length-1]); 
+                    priceTracker.style.display = 'none';
+                } else {
+                    const d = param.seriesPrices.get(candleSeries);
+                    const ep = candleSeries.coordinateToPrice(param.point.y);
+                    if (d && ep) {
+                        const hY = candleSeries.priceToCoordinate(d.high), lY = candleSeries.priceToCoordinate(d.low);
+                        if (param.point.y >= (hY - 5) && param.point.y <= (lY + 5)) {
+                            priceTracker.style.display = 'block'; priceTracker.innerHTML = ep.toFixed(2);
+                            let left = param.point.x + 15; if (left + 60 > mainBox.clientWidth) left -= 80;
+                            priceTracker.style.left = left + 'px'; priceTracker.style.top = (param.point.y + 15) + 'px';
+                        } else priceTracker.style.display = 'none';
+                    }
+                    if(d) updateLegend({...d, time: param.time});
+                }
             });
+
+            intraChart.subscribeCrosshairMove(param => {
+                if (!param.point || !param.time || param.point.x < 0 || param.point.y < 0) intraTracker.style.display = 'none';
+                else {
+                    const ep = intraSeries.coordinateToPrice(param.point.y);
+                    if (ep) {
+                        intraTracker.style.display = 'block'; intraTracker.innerHTML = ep.toFixed(2);
+                        let left = param.point.x + 15; if (left + 60 > intraBox.clientWidth) left -= 80;
+                        intraTracker.style.left = left + 'px'; intraTracker.style.top = (param.point.y + 15) + 'px';
+                    }
+                }
+            });
+
+            setupToggles();
         }
 
         function updateLegend(d) {
@@ -198,6 +276,35 @@
                 高=<span style="color:${color}">${d.high.toFixed(2)}</span> 
                 低=<span style="color:${color}">${d.low.toFixed(2)}</span> 
                 收=<span style="color:${color}">${d.close.toFixed(2)}</span>`;
+        }
+
+        // 🌟 核心算法：布林通道 (20MA, ±2 StdDev)
+        function calcBollingerBands(data, period = 20, multiplier = 2) {
+            const upper = [], lower = [];
+            for (let i = 0; i < data.length; i++) {
+                if (i < period - 1) continue;
+                let sum = 0;
+                for (let j = 0; j < period; j++) sum += data[i - j].close;
+                const sma = sum / period;
+
+                let varianceSum = 0;
+                for (let j = 0; j < period; j++) varianceSum += Math.pow(data[i - j].close - sma, 2);
+                const stdDev = Math.sqrt(varianceSum / period);
+
+                upper.push({ time: data[i].time, value: sma + multiplier * stdDev });
+                lower.push({ time: data[i].time, value: sma - multiplier * stdDev });
+            }
+            return { upper, lower };
+        }
+
+        function calcMA(d, c) {
+            const r = [];
+            for (let i = 0; i < d.length; i++) {
+                if (i < c - 1) continue;
+                let s = 0; for (let j = 0; j < c; j++) s += d[i-j].close;
+                r.push({ time: d[i].time, value: s/c });
+            }
+            return r;
         }
 
         async function fetchQuoteAndMetrics() {
@@ -230,7 +337,7 @@
                     document.getElementById('m-avg').innerText = (r.averageDailyVolume3Month / 1000).toFixed(0) + ' K';
                     document.getElementById('m-swing').innerText = r.regularMarketPreviousClose ? (( (r.regularMarketDayHigh - r.regularMarketDayLow) / r.regularMarketPreviousClose) * 100).toFixed(2) + '%' : '--';
                 }
-            } catch (e) { console.warn("Quote Error"); }
+            } catch (e) {}
         }
 
         async function fetchIntraday() {
@@ -262,35 +369,47 @@
                             { time: pts.find(p => p.value === mxV).time, position: 'aboveBar', color: '#ef5350', shape: 'arrowDown', text: '高 ' + mxV.toFixed(2) },
                             { time: pts.find(p => p.value === miV).time, position: 'belowBar', color: '#26a69a', shape: 'arrowUp', text: '低 ' + miV.toFixed(2) }
                         ]);
-                        st.innerText = `📊 ${r==='1d'?'當日':r}走勢 - 已同步`;
+                        st.innerText = `📊 ${r==='1d'?'當日':r}走勢 - 同步中`;
                     }
                 }
-            } catch (e) { st.innerText = "⚠️ 訊號微弱，嘗試備援通道中..."; }
+            } catch (e) { st.innerText = "⚠️ 數據過載，重試中..."; }
         }
 
         async function selectStock(code, name) {
-            currentSymbol = code; document.getElementById('current-title').innerText = `${code} ${name}`;
+            currentSymbol = code; 
+            document.getElementById('current-title').innerText = `${code} ${name}`;
+            
+            // 儲存到記憶體
+            userPrefs.symbol = code;
+            userPrefs.name = name;
+            savePrefs();
+
             intraSeries.setData([]); intraVolSeries.setData([]); candleSeries.setData([]); volumeSeries.setData([]);
             const start = new Date(); start.setMonth(start.getMonth() - 14);
             try {
                 const data = await fetchUltraResilient(`https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${code}&start_date=${start.toISOString().split('T')[0]}`);
                 const fmt = data.data.map(d => ({ time: d.date, open: d.open, high: d.max, low: d.min, close: d.close }));
                 const vls = data.data.map(d => ({ time: d.date, value: d.Trading_Volume, color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)' }));
-                globalChartData = fmt; candleSeries.setData(fmt); volumeSeries.setData(vls);
+                
+                globalChartData = fmt; 
+                candleSeries.setData(fmt); 
+                volumeSeries.setData(vls);
+                
                 ma5.setData(calcMA(fmt, 5)); ma20.setData(calcMA(fmt, 20)); ma60.setData(calcMA(fmt, 60));
+                
+                // 🌟 計算並寫入布林通道數據
+                const bbData = calcBollingerBands(fmt, 20, 2);
+                bbUpper.setData(bbData.upper);
+                bbLower.setData(bbData.lower);
+
                 chart.timeScale().fitContent(); updateLegend(fmt[fmt.length-1]);
             } catch (e) {}
-            await fetchQuoteAndMetrics(); await fetchIntraday();
-        }
 
-        function calcMA(d, c) {
-            const r = [];
-            for (let i = 0; i < d.length; i++) {
-                if (i < c - 1) continue;
-                let s = 0; for (let j = 0; j < c; j++) s += d[i-j].close;
-                r.push({ time: d[i].time, value: s/c });
-            }
-            return r;
+            // 更新左側清單活躍狀態
+            const k = document.getElementById('search-input').value.trim().toLowerCase();
+            renderList(k === "" ? defaultTop50List : allStocks.filter(s => s.Code.includes(k) || s.Name.includes(k)), k === "");
+            
+            await fetchQuoteAndMetrics(); await fetchIntraday();
         }
 
         async function initStockDatabase() {
@@ -299,9 +418,15 @@
                 const seen = new Set();
                 allStocks = data.data.filter(s => s.type === 'twse' && !seen.has(s.stock_id) && seen.add(s.stock_id))
                     .map(s => ({ Code: s.stock_id, Name: s.stock_name, Market: (s.stock_id.startsWith('00')||s.industry_category==='ETF')?'ETF':'上市' }));
-                renderList(allStocks.filter(s => top50Codes.includes(s.Code)).sort((a,b) => a.Market==='ETF'?-1:1), true);
+                defaultTop50List = allStocks.filter(s => top50Codes.includes(s.Code)).sort((a,b) => a.Market==='ETF'?-1:1);
+                renderList(defaultTop50List, true);
+                
+                // 🌟 啟動時自動載入上次記憶的股票
+                setTimeout(() => {
+                    initChart();
+                    selectStock(userPrefs.symbol, userPrefs.name);
+                }, 100);
             } catch (e) {}
-            setTimeout(initChart, 100);
         }
 
         function renderList(list, isHome = false) {
@@ -317,22 +442,22 @@
 
         document.getElementById('search-input').addEventListener('input', e => {
             const k = e.target.value.trim().toLowerCase();
-            renderList(k === "" ? allStocks.filter(s => top50Codes.includes(s.Code)) : allStocks.filter(s => s.Code.includes(k) || s.Name.includes(k)), k === "");
+            renderList(k === "" ? defaultTop50List : allStocks.filter(s => s.Code.includes(k) || s.Name.includes(k)), k === "");
         });
 
-        document.getElementById('intraday-range').addEventListener('change', fetchIntraday);
-        document.querySelectorAll('.ma-toggle').forEach(el => el.onclick = function(){
-            this.classList.toggle('disabled');
-            const s = this.id==='toggle-ma5'?ma5:(this.id==='toggle-ma20'?ma20:ma60);
-            s.applyOptions({ visible: !this.classList.contains('disabled') });
+        // 監聽區間下拉選單並儲存記憶
+        document.getElementById('intraday-range').addEventListener('change', (e) => {
+            userPrefs.range = e.target.value;
+            savePrefs();
+            fetchIntraday();
         });
 
         initStockDatabase();
         setInterval(fetchQuoteAndMetrics, 15000);
         setInterval(fetchIntraday, 60000);
         window.onresize = () => {
-            if (chart) chart.resize(document.getElementById('main-chart').clientWidth, document.getElementById('main-chart').clientHeight);
-            if (intraChart) intraChart.resize(document.getElementById('intraday-chart').clientWidth, document.getElementById('intraday-chart').clientHeight);
+            if(chart) chart.resize(document.getElementById('main-chart').clientWidth, document.getElementById('main-chart').clientHeight);
+            if(intraChart) intraChart.resize(document.getElementById('intraday-chart').clientWidth, document.getElementById('intraday-chart').clientHeight);
         };
     </script>
 </body>
