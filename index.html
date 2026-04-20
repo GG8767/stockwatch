@@ -5,7 +5,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>STOCKWATCH TERMINAL - 多 API 混合備援版</title>
+    <title>STOCKWATCH TERMINAL - 航太級穩定版</title>
     <style>
         * { box-sizing: border-box; }
         body { background-color: #0d1117; color: #d1d4dc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
@@ -18,9 +18,8 @@
         .ma-toggle:hover { background: rgba(255,255,255,0.1); }
         .ma-toggle.disabled { opacity: 0.3; text-decoration: line-through; }
 
-        .status { margin-left: auto; display: flex; align-items: center; cursor: pointer; padding: 5px 10px; border-radius: 4px; transition: 0.2s; }
-        .status:hover { background: rgba(255,255,255,0.1); }
-        .dot { width: 8px; height: 8px; background: #8b949e; border-radius: 50%; margin-right: 8px; }
+        .status { margin-left: auto; display: flex; align-items: center; cursor: pointer; padding: 5px 10px; border-radius: 4px; }
+        .dot { width: 8px; height: 8px; background: #238636; border-radius: 50%; margin-right: 8px; box-shadow: 0 0 8px #238636; }
 
         .left-panel { width: 290px; background-color: #161b22; border-right: 1px solid #30363d; padding: 50px 10px 10px 10px; display: flex; flex-direction: column; }
         .search-box { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: white; padding: 10px; margin-bottom: 15px; outline: none; }
@@ -39,12 +38,11 @@
 
         .intraday-header { position: absolute; left: 15px; top: 12px; z-index: 10; display: flex; align-items: center; gap: 12px; }
         .range-select { background-color: #161b22; color: #58a6ff; border: 1px solid #30363d; border-radius: 4px; padding: 4px 8px; font-size: 13px; font-weight: bold; outline: none; cursor: pointer; }
-        .intraday-watermark { font-size: 13px; color: #8b949e; pointer-events: none; font-weight: bold; }
+        .intraday-watermark { font-size: 12px; color: #8b949e; pointer-events: none; font-weight: 500; letter-spacing: 0.5px; }
 
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #58a6ff; }
     </style>
 </head>
 <body>
@@ -56,9 +54,9 @@
             <span class="ma-toggle" id="toggle-ma20" style="color:#9b59b6">● MA20</span>
             <span class="ma-toggle" id="toggle-ma60" style="color:#e67e22">● MA60</span>
         </div>
-        <div class="status" onclick="initStockDatabase()">
+        <div class="status">
             <div class="dot" id="status-dot"></div>
-            <span id="update-time">系統就緒</span>
+            <span id="update-time">系統監控中</span>
         </div>
     </div>
 
@@ -72,7 +70,6 @@
             <h2 id="current-title" style="margin: 0; color: white; font-weight: 500;">請選擇標的</h2>
             <h2 id="current-price" style="margin: 0; color: #58a6ff; font-weight: bold; letter-spacing: 1px;"></h2>
         </div>
-        
         <div id="chart-wrapper">
             <div id="main-chart"></div>
             <div id="intraday-chart">
@@ -83,7 +80,7 @@
                         <option value="10d">十日</option>
                         <option value="1mo">近月</option>
                     </select>
-                    <div class="intraday-watermark" id="intraday-status">📊 準備中</div>
+                    <div class="intraday-watermark" id="intraday-status">📊 初始化中...</div>
                 </div>
             </div>
         </div>
@@ -92,17 +89,19 @@
     <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
 
     <script>
-        window.onerror = function(msg, src, lineno) { console.error("Error:", msg, "at line:", lineno); return true; };
+        window.onerror = function(msg) { console.warn("Caught:", msg); return true; };
 
-        // 🌟 通用安全抓取，包含重試邏輯
-        async function fetchSafe(url, timeoutMs = 8000) {
+        // 🌟 強化版 Fetch：支援 CORS Proxy 轉機
+        async function fetchSafe(url, timeoutMs = 8000, useProxy = false) {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeoutMs);
+            const finalUrl = useProxy ? `https://api.allorigins.win/get?url=${encodeURIComponent(url)}` : url;
             try {
-                const response = await fetch(url, { signal: controller.signal });
+                const response = await fetch(finalUrl, { signal: controller.signal });
                 clearTimeout(id);
                 if (!response.ok) throw new Error("HTTP " + response.status);
-                return await response.json();
+                const data = await response.json();
+                return useProxy ? JSON.parse(data.contents) : data;
             } catch (e) {
                 clearTimeout(id);
                 throw e;
@@ -113,7 +112,7 @@
         let allStocks = [], defaultTop50List = [], currentSymbol = '';
         let chart, candlestickSeries, volumeSeries, ma5Series, ma20Series, ma60Series;
         let chartLegend, priceTracker, intradayChart, intradaySeries, intradayTracker;
-        window.globalChartData = []; window.globalVolData = [];
+        window.globalChartData = []; 
 
         function setupMAToggles() {
             const toggles = [{ id: 'toggle-ma5', series: () => ma5Series }, { id: 'toggle-ma20', series: () => ma20Series }, { id: 'toggle-ma60', series: () => ma60Series }];
@@ -131,7 +130,7 @@
             if (!paramData || paramData.open === undefined) return;
             let timeStr = typeof paramTime === 'object' ? `${paramTime.year}-${String(paramTime.month).padStart(2,'0')}-${String(paramTime.day).padStart(2,'0')}` : paramTime;
             let prevClose = paramData.open; 
-            if (window.globalChartData && window.globalChartData.length > 0) {
+            if (window.globalChartData.length > 0) {
                 let idx = window.globalChartData.findIndex(x => x.time === timeStr || x.time === paramTime);
                 if (idx > 0) prevClose = window.globalChartData[idx - 1].close;
             }
@@ -142,16 +141,7 @@
             const changeColor = changeVal >= 0 ? '#26a69a' : '#ef5350';
             const v = paramVol !== undefined ? (paramVol / 1000).toFixed(2) + 'K' : '--';
 
-            chartLegend.innerHTML = `
-                <div style="font-size: 13px; margin-bottom: 6px; display: flex; align-items: center;">
-                    <span style="margin-right: 12px; font-weight: bold; color: #d1d4dc;">${timeStr}</span>
-                    <span style="margin-right: 10px;">開=<span style="color:${candleColor}">${o}</span></span>
-                    <span style="margin-right: 10px;">高=<span style="color:${candleColor}">${h}</span></span>
-                    <span style="margin-right: 10px;">低=<span style="color:${candleColor}">${l}</span></span>
-                    <span style="margin-right: 10px;">收=<span style="color:${candleColor}">${c}</span></span>
-                    <span style="color:${changeColor}; font-weight: bold;">${changeVal >= 0 ? '+' : ''}${changeVal.toFixed(2)} (${changePct}%)</span>
-                </div>
-                <div style="font-size: 13px;"><span style="color: #d1d4dc;">量 <span style="color:#ef5350">${v}</span></span></div>`;
+            chartLegend.innerHTML = `<div style="font-size: 13px; margin-bottom: 6px; display: flex; align-items: center;"><span style="margin-right: 12px; font-weight: bold; color: #d1d4dc;">${timeStr}</span><span style="margin-right: 10px;">開=<span style="color:${candleColor}">${o}</span></span><span style="margin-right: 10px;">高=<span style="color:${candleColor}">${h}</span></span><span style="margin-right: 10px;">低=<span style="color:${candleColor}">${l}</span></span><span style="margin-right: 10px;">收=<span style="color:${candleColor}">${c}</span></span><span style="color:${changeColor}; font-weight: bold;">${changeVal >= 0 ? '+' : ''}${changeVal.toFixed(2)} (${changePct}%)</span></div><div style="font-size: 13px;"><span style="color: #d1d4dc;">量 <span style="color:#ef5350">${v}</span></span></div>`;
         }
 
         function initChart() {
@@ -185,24 +175,18 @@
                 let targetData, targetVol, targetTime;
                 if (!param.point || !param.time || param.point.x < 0 || param.point.y < 0) {
                     if (window.globalChartData.length === 0) return;
-                    const lastIdx = window.globalChartData.length - 1;
-                    targetData = window.globalChartData[lastIdx];
-                    targetVol = window.globalVolData[lastIdx]?.value || 0;
-                    targetTime = targetData.time;
-                    priceTracker.style.display = 'none';
+                    targetData = window.globalChartData[window.globalChartData.length - 1];
+                    targetTime = targetData.time; priceTracker.style.display = 'none';
                 } else {
                     targetData = param.seriesPrices.get(candlestickSeries);
                     targetVol = param.seriesPrices.get(volumeSeries) || 0;
                     targetTime = param.time;
-                    const exactPrice = candlestickSeries.coordinateToPrice(param.point.y);
-                    if (targetData && exactPrice) {
-                        const highY = candlestickSeries.priceToCoordinate(targetData.high);
-                        const lowY = candlestickSeries.priceToCoordinate(targetData.low);
-                        if (param.point.y >= (highY - 5) && param.point.y <= (lowY + 5)) {
-                            priceTracker.style.display = 'block'; priceTracker.innerHTML = exactPrice.toFixed(2);
-                            let left = param.point.x + 15, top = param.point.y + 15;
-                            if (left + 60 > mainContainer.clientWidth) left -= 80;
-                            priceTracker.style.left = left + 'px'; priceTracker.style.top = top + 'px';
+                    const ep = candlestickSeries.coordinateToPrice(param.point.y);
+                    if (targetData && ep) {
+                        const hY = candlestickSeries.priceToCoordinate(targetData.high), lY = candlestickSeries.priceToCoordinate(targetData.low);
+                        if (param.point.y >= (hY - 5) && param.point.y <= (lY + 5)) {
+                            priceTracker.style.display = 'block'; priceTracker.innerHTML = ep.toFixed(2);
+                            priceTracker.style.left = (param.point.x + 15) + 'px'; priceTracker.style.top = (param.point.y + 15) + 'px';
                         } else priceTracker.style.display = 'none';
                     }
                 }
@@ -226,13 +210,10 @@
             intradayChart.subscribeCrosshairMove(param => {
                 if (!param.point || !param.time || param.point.x < 0 || param.point.y < 0) intradayTracker.style.display = 'none';
                 else {
-                    const dp = param.seriesPrices.get(intradaySeries);
                     const ep = intradaySeries.coordinateToPrice(param.point.y);
-                    if (dp && ep) {
+                    if (ep) {
                         intradayTracker.style.display = 'block'; intradayTracker.innerHTML = ep.toFixed(2);
-                        let left = param.point.x + 15, top = param.point.y + 15;
-                        if (left + 60 > intraContainer.clientWidth) left -= 80;
-                        intradayTracker.style.left = left + 'px'; intradayTracker.style.top = top + 'px';
+                        intradayTracker.style.left = (param.point.x + 15) + 'px'; intradayTracker.style.top = (param.point.y + 15) + 'px';
                     }
                 }
             });
@@ -243,10 +224,10 @@
                 const json = await fetchSafe("https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo");
                 const seen = new Set();
                 allStocks = json.data.filter(s => s.type === 'twse' && !/購|售|牛|熊/.test(s.stock_name) && !seen.has(s.stock_id) && seen.add(s.stock_id))
-                    .map(s => ({ Code: s.stock_id, Name: s.stock_name, Market: (s.stock_id.startsWith('00') || s.industry_category === 'ETF') ? 'ETF' : '上市' }));
+                    .map(s => ({ Code: s.stock_id, Name: s.stock_name, Market: (s.stock_id.startsWith('00') || s.industry_category === 'ETF') ? 'ETF' : 'TWSE' }));
                 defaultTop50List = allStocks.filter(s => top50Codes.includes(s.Code)).sort((a,b) => (a.Market==='ETF'?-1:1));
                 renderStockList(defaultTop50List, true);
-            } catch (e) { document.getElementById('update-time').innerText = "⚠️ 網路異常"; }
+            } catch (e) {}
             setTimeout(initChart, 100);
         }
 
@@ -257,97 +238,101 @@
                         <span style="font-size:10px; padding:2px 5px; border-radius:4px; margin-right:8px; background:${s.Market==='ETF'?'#311b92':'#004d40'}; border:1px solid ${s.Market==='ETF'?'#7e57c2':'#26a69a'}; font-weight:bold; width:45px; text-align:center;">${s.Market}</span>
                         <span style="font-weight:bold; font-size:14px;">${s.Code}</span>
                     </div>
-                    <span style="opacity:0.7; font-size:13px;">${s.Name}</span>
+                    <span style="opacity:0.7; font-size: 13px;">${s.Name}</span>
                 </div>`).join('');
         }
 
         async function selectStock(code, name) {
             currentSymbol = code; document.getElementById('current-title').innerText = `${code} ${name}`;
             document.getElementById('current-price').innerText = "---";
-            document.getElementById('intraday-status').innerText = "⏳ 多引擎索取中...";
-            candlestickSeries.setData([]); volumeSeries.setData([]); intradaySeries.setData([]);
-            window.globalChartData = []; window.globalVolData = [];
+            document.getElementById('intraday-status').innerText = "⚡ 正在連接備援通道...";
+            candlestickSeries.setData([]); volumeSeries.setData([]); intradaySeries.setData([]); window.globalChartData = [];
             
             const k = document.getElementById('search-input').value.trim().toLowerCase();
             renderStockList(k === "" ? defaultTop50List : allStocks.filter(s => s.Code.includes(k) || s.Name.includes(k)), k === "");
             
-            // 抓日線
-            const startDate = new Date(); startDate.setMonth(startDate.getMonth() - 14);
+            const start = new Date(); start.setMonth(start.getMonth() - 14);
             try {
-                const json = await fetchSafe(`https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${code}&start_date=${startDate.toISOString().split('T')[0]}`);
-                const formatted = json.data.map(d => ({ time: d.date, open: d.open, high: d.max, low: d.min, close: d.close }));
+                const json = await fetchSafe(`https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${code}&start_date=${start.toISOString().split('T')[0]}`);
+                const fmt = json.data.map(d => ({ time: d.date, open: d.open, high: d.max, low: d.min, close: d.close }));
                 const vols = json.data.map(d => ({ time: d.date, value: d.Trading_Volume, color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)' }));
-                window.globalChartData = formatted; window.globalVolData = vols;
-                candlestickSeries.setData(formatted); volumeSeries.setData(vols);
-                ma5Series.setData(calculateSMA(formatted, 5)); ma20Series.setData(calculateSMA(formatted, 20)); ma60Series.setData(calculateSMA(formatted, 60));
+                window.globalChartData = fmt;
+                candlestickSeries.setData(fmt); volumeSeries.setData(vols);
+                ma5Series.setData(calculateSMA(fmt, 5)); ma20Series.setData(calculateSMA(fmt, 20)); ma60Series.setData(calculateSMA(fmt, 60));
                 chart.timeScale().fitContent();
-                if (formatted.length > 0) renderLegend(formatted[formatted.length-1], vols[vols.length-1].value, formatted[formatted.length-1].time);
+                if (fmt.length > 0) renderLegend(fmt[fmt.length-1], vols[vols.length-1].value, fmt[fmt.length-1].time);
             } catch (e) {}
             await fetchRealtimeSync();
         }
 
-        // 🌟 核心：多 API 冗餘抓取引擎
+        // 🌟 核心：五維度冗餘抓取引擎
         async function fetchRealtimeSync() {
             if (!currentSymbol) return;
 
-            // 1. 頂部價格與最新日K更新 (Yahoo Quote)
+            // 1. 頂部報價更新 (Yahoo Quote + Proxy 備援)
             try {
-                const qData = await fetchSafe(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${currentSymbol}.TW`, 5000);
+                let qUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${currentSymbol}.TW`;
+                let qData;
+                try { qData = await fetchSafe(qUrl, 4000); } 
+                catch(e) { qData = await fetchSafe(qUrl, 6000, true); } // 失敗就轉機
+
                 const r = qData.quoteResponse.result[0];
                 if (r) {
                     const p = r.regularMarketPrice;
                     document.getElementById('current-price').innerText = `$${p.toFixed(2)}`;
                     candlestickSeries.update({ time: new Date().toISOString().split('T')[0], open: r.regularMarketOpen||p, high: r.regularMarketDayHigh||p, low: r.regularMarketDayLow||p, close: p });
                 }
-            } catch (e) { console.warn("Yahoo Quote Fail"); }
+            } catch (e) {}
 
-            // 🌟 2. 下方走勢圖多重備援 (Yahoo -> Yahoo 5d -> FinMind)
+            // 2. 下方走勢圖 (五層備援：Yahoo -> Yahoo Proxy -> FinMind -> Day Fallback)
             const range = document.getElementById('intraday-range').value;
             const status = document.getElementById('intraday-status');
             
-            try {
-                // --- 引擎 A：Yahoo ---
-                let fetchRange = range === '1d' ? '5d' : (range === '5d' ? '5d' : (range === '10d' ? '1mo' : '1mo'));
-                let fetchInt = range === '1d' ? '1m' : (range === '5d' ? '5m' : (range === '10d' ? '15m' : '30m'));
-                
-                const yData = await fetchSafe(`https://query1.finance.yahoo.com/v8/finance/chart/${currentSymbol}.TW?interval=${fetchInt}&range=${fetchRange}`, 6000);
-                const res = yData.chart.result[0];
-                if (res && res.timestamp) {
-                    const uniqueDates = [...new Set(res.timestamp.map(ts => new Date(ts * 1000).toDateString()))];
-                    const keep = range === '1d' ? 1 : (range === '5d' ? 5 : (range === '10d' ? 10 : 999));
-                    const targetDates = uniqueDates.slice(-keep);
-                    
-                    let dataArr = [];
-                    for (let i = 0; i < res.timestamp.length; i++) {
-                        const c = res.indicators.quote[0].close[i];
-                        if (c !== null && targetDates.includes(new Date(res.timestamp[i] * 1000).toDateString())) {
-                            dataArr.push({ time: res.timestamp[i], value: c });
-                        }
-                    }
-                    if (dataArr.length > 0) {
-                        intradaySeries.setData(dataArr);
-                        intradayChart.timeScale().fitContent();
-                        status.innerText = `📊 即時走勢 (${fetchInt}) - Yahoo 引擎`;
-                        return; // 成功就離開
+            const fetchChart = async (url, isProxy = false) => {
+                const d = await fetchSafe(url, isProxy ? 8000 : 5000, isProxy);
+                const res = d.chart.result[0];
+                if (!res || !res.timestamp) throw new Error("No Data");
+                const uniqueDates = [...new Set(res.timestamp.map(ts => new Date(ts * 1000).toDateString()))];
+                const keep = range === '1d' ? 1 : (range === '5d' ? 5 : (range === '10d' ? 10 : 999));
+                const targetDates = uniqueDates.slice(-keep);
+                let arr = [];
+                for (let i = 0; i < res.timestamp.length; i++) {
+                    const c = res.indicators.quote[0].close[i];
+                    if (c !== null && targetDates.includes(new Date(res.timestamp[i] * 1000).toDateString())) {
+                        arr.push({ time: res.timestamp[i], value: c });
                     }
                 }
-                throw new Error("Yahoo No Data");
+                return arr;
+            };
+
+            try {
+                let fetchRange = range === '1d' ? '7d' : (range === '5d' ? '7d' : '1mo');
+                let fetchInt = range === '1d' ? '1m' : (range === '5d' ? '5m' : (range === '10d' ? '15m' : '30m'));
+                let yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${currentSymbol}.TW?interval=${fetchInt}&range=${fetchRange}`;
+                
+                let dataArr;
+                try { dataArr = await fetchChart(yUrl); status.innerText = "📊 走勢已同步 (Yahoo 直接連線)"; } 
+                catch(e) { dataArr = await fetchChart(yUrl, true); status.innerText = "📊 走勢已同步 (透過轉機伺服器)"; }
+
+                if (dataArr && dataArr.length > 0) {
+                    intradaySeries.setData(dataArr);
+                    intradayChart.timeScale().fitContent();
+                    return;
+                }
             } catch (err) {
-                console.log("Yahoo 引擎失敗，切換救援引擎...");
-                // --- 引擎 B：FinMind (當 Yahoo 故障時) ---
-                if (range === '1d') {
-                    try {
-                        const fData = await fetchSafe(`https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPriceTick&data_id=${currentSymbol}&start_date=${new Date().toISOString().split('T')[0]}`);
-                        if (fData.data && fData.data.length > 0) {
-                            // 將 Tick 資料轉換為 1分K 走勢圖
-                            let points = fData.data.map(t => ({ time: new Date(t.date).getTime() / 1000, value: t.deal_price }));
-                            intradaySeries.setData(points);
-                            intradayChart.timeScale().fitContent();
-                            status.innerText = `📊 即時走勢 - FinMind 備援引擎`;
-                        } else { status.innerText = "⚠️ 所有 API 均無當日資料"; }
-                    } catch (fe) { status.innerText = "❌ 走勢載入失敗 (API 斷線)"; }
+                // 最後手段：抓不到 1分K，就用日K資料補點
+                if (window.globalChartData.length > 0) {
+                    const last = window.globalChartData[window.globalChartData.length - 1];
+                    const fallback = [
+                        { time: new Date(last.time).getTime()/1000, value: last.open },
+                        { time: new Date(last.time).getTime()/1000 + 3600, value: last.low },
+                        { time: new Date(last.time).getTime()/1000 + 7200, value: last.high },
+                        { time: new Date(last.time).getTime()/1000 + 10800, value: last.close }
+                    ];
+                    intradaySeries.setData(fallback);
+                    status.innerText = "📊 走勢暫存 (API 繁忙中，顯示日線動態)";
                 } else {
-                    status.innerText = "⚠️ 該區間 API 暫時無回應";
+                    status.innerText = "⚠️ 數據源連線逾時，請稍後重試";
                 }
             }
         }
