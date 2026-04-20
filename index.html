@@ -5,11 +5,12 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>STOCKWATCH TERMINAL - 旗艦專業修復版</title>
+    <title>STOCKWATCH TERMINAL - 旗艦專業版 2.0</title>
     <style>
         * { box-sizing: border-box; }
         body { background-color: #0d1117; color: #d1d4dc; font-family: 'Segoe UI', -apple-system, sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
 
+        /* 頂部導覽列 */
         .header { position: absolute; top: 0; width: 100%; height: 40px; background: rgba(22, 27, 34, 0.95); border-bottom: 1px solid #30363d; display: flex; align-items: center; padding: 0 20px; font-size: 11px; z-index: 100; }
         .header .logo { color: #ff9800; font-weight: bold; letter-spacing: 2px; margin-right: 25px; }
         .ma-legend { display: flex; gap: 15px; font-size: 12px; font-weight: bold; }
@@ -19,6 +20,7 @@
         .status { margin-left: auto; display: flex; align-items: center; font-size: 12px; color: #8b949e; }
         .dot { width: 8px; height: 8px; background: #238636; border-radius: 50%; margin-right: 8px; box-shadow: 0 0 8px #238636; }
 
+        /* 左側列表 */
         .left-panel { width: 300px; background-color: #161b22; border-right: 1px solid #30363d; padding: 50px 10px 10px 10px; display: flex; flex-direction: column; }
         .search-box { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: white; padding: 10px; margin-bottom: 15px; outline: none; }
         #stock-list { flex: 1; overflow-y: auto; }
@@ -26,6 +28,7 @@
         .stock-item:hover { background: #21262d; }
         .stock-item.active { border: 1px solid #58a6ff; background: #1c2128; }
 
+        /* 右側主視窗 */
         .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; overflow: hidden; }
         .title-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         
@@ -36,6 +39,7 @@
         .intraday-header { position: absolute; left: 12px; top: 10px; z-index: 10; display: flex; align-items: center; gap: 10px; }
         .range-select { background: #161b22; color: #58a6ff; border: 1px solid #30363d; border-radius: 4px; padding: 3px 6px; font-size: 12px; font-weight: bold; outline: none; cursor: pointer; }
 
+        /* 下方數據牆 */
         .metrics-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px; background: #30363d; border: 1px solid #30363d; border-radius: 4px; margin-top: 10px; font-size: 12px; }
         .metric-item { background: #161b22; padding: 8px 10px; display: flex; justify-content: space-between; }
         .m-label { color: #8b949e; }
@@ -56,7 +60,7 @@
             <span class="ma-toggle" id="toggle-ma20" style="color:#9b59b6">● MA20</span>
             <span class="ma-toggle" id="toggle-ma60" style="color:#e67e22">● MA60</span>
         </div>
-        <div class="status"><div class="dot"></div>連線中...</div>
+        <div class="status"><div class="dot"></div>系統連線中</div>
     </div>
 
     <div class="left-panel">
@@ -69,7 +73,7 @@
             <h2 id="current-title" style="margin: 0; color: white; font-weight: 600; font-size: 24px;">請選擇標的</h2>
             <div id="current-price-area" style="text-align: right;">
                 <div id="current-price" style="font-size: 28px; font-weight: bold; color: #58a6ff;">---</div>
-                <div id="current-change" style="font-size: 14px;">-- (--)</div>
+                <div id="current-change" style="font-size: 14px; font-weight: bold;">-- (--)</div>
             </div>
         </div>
         
@@ -106,7 +110,7 @@
     <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
 
     <script>
-        // 🌟 修復日期顯示：處理 [object Object] 的問題
+        // 🌟 修復日期顯示邏輯
         function formatDisplayTime(t) {
             if (!t) return "--";
             if (typeof t === 'object' && t.year) {
@@ -115,17 +119,30 @@
             return t;
         }
 
-        async function fetchSafe(url, timeoutMs = 8000, useProxy = false) {
-            const controller = new AbortController();
-            const id = setTimeout(() => controller.abort(), timeoutMs);
-            const finalUrl = useProxy ? `https://api.allorigins.win/get?url=${encodeURIComponent(url)}` : url;
+        // 🌟 強化版三級跳 Fetch：Direct -> AllOrigins -> ThingProxy
+        async function fetchUltraResilient(url, timeoutMs = 8000) {
+            // 第一跳：嘗試直接連線
             try {
-                const response = await fetch(finalUrl, { signal: controller.signal });
-                clearTimeout(id);
-                if (!response.ok) throw new Error("HTTP " + response.status);
-                const data = await response.json();
-                return useProxy ? JSON.parse(data.contents) : data;
-            } catch (e) { clearTimeout(id); throw e; }
+                const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+                if (response.ok) return await response.json();
+            } catch (e) { console.warn("Direct fetch failed, trying Proxy 1..."); }
+
+            // 第二跳：AllOrigins 轉機
+            try {
+                const proxyUrl1 = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+                const response = await fetch(proxyUrl1, { signal: AbortSignal.timeout(timeoutMs + 2000) });
+                if (response.ok) {
+                    const data = await response.json();
+                    return JSON.parse(data.contents);
+                }
+            } catch (e) { console.warn("Proxy 1 failed, trying Proxy 2..."); }
+
+            // 第三跳：ThingProxy 轉機
+            try {
+                const proxyUrl2 = `https://thingproxy.freeboard.io/fetch/${url}`;
+                const response = await fetch(proxyUrl2, { signal: AbortSignal.timeout(timeoutMs + 4000) });
+                if (response.ok) return await response.json();
+            } catch (e) { throw new Error("All fetching paths failed."); }
         }
 
         const top50Codes = ["0050", "0056", "00878", "00919", "00929", "2330", "2317", "2454", "2382", "2308", "2881", "2882", "2603", "2409", "3231", "2344", "2303", "2891", "1301", "2002", "2412", "1216", "2886", "2884", "2618", "2609", "3481", "2356", "2379", "3034", "3037", "3008", "2353", "2357", "2324", "3661", "6415", "3017", "2395", "2376", "2449", "2362", "2385", "3293", "6274"];
@@ -186,100 +203,84 @@
         async function fetchQuoteAndMetrics() {
             if (!currentSymbol) return;
             try {
-                // 優先抓取即時報價填充數據牆
                 const qUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${currentSymbol}.TW`;
-                let qData;
-                try { qData = await fetchSafe(qUrl, 4000); } catch(e) { qData = await fetchSafe(qUrl, 6000, true); }
+                const qData = await fetchUltraResilient(qUrl);
                 const r = qData.quoteResponse.result[0];
                 if (r) {
-                    const price = r.regularMarketPrice;
-                    const change = r.regularMarketChange;
-                    const pct = r.regularMarketChangePercent;
-                    const color = change >= 0 ? '#26a69a' : '#ef5350';
-                    const sign = change >= 0 ? '+' : '';
+                    const p = r.regularMarketPrice, chg = r.regularMarketChange, pct = r.regularMarketChangePercent;
+                    const c = chg >= 0 ? '#26a69a' : '#ef5350', s = chg >= 0 ? '+' : '';
 
-                    document.getElementById('current-price').innerText = price.toFixed(2);
-                    document.getElementById('current-price').style.color = color;
-                    document.getElementById('current-change').innerText = `${sign}${change.toFixed(2)} (${sign}${pct.toFixed(2)}%)`;
-                    document.getElementById('current-change').style.color = color;
+                    document.getElementById('current-price').innerText = p.toFixed(2);
+                    document.getElementById('current-price').style.color = c;
+                    document.getElementById('current-change').innerText = `${s}${chg.toFixed(2)} (${s}${pct.toFixed(2)}%)`;
+                    document.getElementById('current-change').style.color = c;
 
-                    document.getElementById('m-price').innerText = price.toFixed(2);
-                    document.getElementById('m-change').innerText = `${sign}${change.toFixed(2)}`;
-                    document.getElementById('m-change').className = `m-val ${change>=0?'m-up':'m-down'}`;
-                    document.getElementById('m-pct').innerText = `${sign}${pct.toFixed(2)}%`;
-                    document.getElementById('m-open').innerText = (r.regularMarketOpen || price).toFixed(2);
-                    document.getElementById('m-high').innerText = (r.regularMarketDayHigh || price).toFixed(2);
-                    document.getElementById('m-low').innerText = (r.regularMarketDayLow || price).toFixed(2);
+                    document.getElementById('m-price').innerText = p.toFixed(2);
+                    document.getElementById('m-change').innerText = `${s}${chg.toFixed(2)}`;
+                    document.getElementById('m-change').className = `m-val ${chg>=0?'m-up':'m-down'}`;
+                    document.getElementById('m-pct').innerText = `${s}${pct.toFixed(2)}%`;
+                    document.getElementById('m-pct').className = `m-val ${chg>=0?'m-up':'m-down'}`;
+                    document.getElementById('m-open').innerText = (r.regularMarketOpen || p).toFixed(2);
+                    document.getElementById('m-high').innerText = (r.regularMarketDayHigh || p).toFixed(2);
+                    document.getElementById('m-low').innerText = (r.regularMarketDayLow || p).toFixed(2);
                     document.getElementById('m-total').innerText = (r.regularMarketVolume / 1000).toFixed(0) + ' K';
-                    document.getElementById('m-prev').innerText = (r.regularMarketPreviousClose || price).toFixed(2);
-                    document.getElementById('m-buy').innerText = (r.bid || price).toFixed(2);
-                    document.getElementById('m-sell').innerText = (r.ask || price).toFixed(2);
+                    document.getElementById('m-prev').innerText = (r.regularMarketPreviousClose || p).toFixed(2);
+                    document.getElementById('m-buy').innerText = (r.bid || p).toFixed(2);
+                    document.getElementById('m-sell').innerText = (r.ask || p).toFixed(2);
                     document.getElementById('m-avg').innerText = (r.averageDailyVolume3Month / 1000).toFixed(0) + ' K';
                     document.getElementById('m-swing').innerText = r.regularMarketPreviousClose ? (( (r.regularMarketDayHigh - r.regularMarketDayLow) / r.regularMarketPreviousClose) * 100).toFixed(2) + '%' : '--';
                 }
-            } catch (e) { console.warn("Metrics failed"); }
+            } catch (e) { console.warn("Quote Error"); }
         }
 
         async function fetchIntraday() {
             if (!currentSymbol) return;
-            const range = document.getElementById('intraday-range').value;
-            const status = document.getElementById('intraday-status');
-            const fetchRange = range === '1d' ? '7d' : range;
-            const fetchInt = range === '1d' ? '1m' : (range === '5d' ? '5m' : '30m');
-            const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${currentSymbol}.TW?interval=${fetchInt}&range=${fetchRange}`;
+            const r = document.getElementById('intraday-range').value;
+            const st = document.getElementById('intraday-status');
+            const fR = r === '1d' ? '7d' : r, fI = r === '1d' ? '1m' : (r === '5d' ? '5m' : '30m');
+            const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${currentSymbol}.TW?interval=${fI}&range=${fR}`;
             
             try {
-                let yData;
-                try { yData = await fetchSafe(yUrl, 5000); } catch(e) { yData = await fetchSafe(yUrl, 8000, true); }
+                const yData = await fetchUltraResilient(yUrl);
                 const res = yData.chart.result[0];
                 if (res && res.timestamp) {
-                    const lastDate = new Date(res.timestamp[res.timestamp.length-1]*1000).toDateString();
-                    let points = [], vols = [];
+                    const lastD = new Set([new Date(res.timestamp[res.timestamp.length-1]*1000).toDateString()]);
+                    let pts = [], vls = [];
                     for(let i=0; i<res.timestamp.length; i++) {
-                        const c = res.indicators.quote[0].close[i];
-                        const v = res.indicators.quote[0].volume[i];
+                        const c = res.indicators.quote[0].close[i], v = res.indicators.quote[0].volume[i];
                         if(c !== null) {
-                            if(range !== '1d' || new Date(res.timestamp[i]*1000).toDateString() === lastDate) {
-                                points.push({ time: res.timestamp[i], value: c });
-                                vols.push({ time: res.timestamp[i], value: v });
+                            if(r !== '1d' || lastD.has(new Date(res.timestamp[i]*1000).toDateString())) {
+                                pts.push({ time: res.timestamp[i], value: c }); vls.push({ time: res.timestamp[i], value: v });
                             }
                         }
                     }
-                    if(points.length > 0) {
-                        intraSeries.setData(points);
-                        intraVolSeries.setData(vols);
+                    if(pts.length > 0) {
+                        intraSeries.setData(pts); intraVolSeries.setData(vls);
                         intraChart.timeScale().fitContent();
-                        const maxV = Math.max(...points.map(p => p.value));
-                        const minV = Math.min(...points.map(p => p.value));
+                        const mxV = Math.max(...pts.map(p => p.value)), miV = Math.min(...pts.map(p => p.value));
                         intraSeries.setMarkers([
-                            { time: points.find(p => p.value === maxV).time, position: 'aboveBar', color: '#ef5350', shape: 'arrowDown', text: '高 ' + maxV.toFixed(2) },
-                            { time: points.find(p => p.value === minV).time, position: 'belowBar', color: '#26a69a', shape: 'arrowUp', text: '低 ' + minV.toFixed(2) }
+                            { time: pts.find(p => p.value === mxV).time, position: 'aboveBar', color: '#ef5350', shape: 'arrowDown', text: '高 ' + mxV.toFixed(2) },
+                            { time: pts.find(p => p.value === miV).time, position: 'belowBar', color: '#26a69a', shape: 'arrowUp', text: '低 ' + miV.toFixed(2) }
                         ]);
-                        status.innerText = `📊 ${range==='1d'?'當日':range}走勢 - 同步成功`;
+                        st.innerText = `📊 ${r==='1d'?'當日':r}走勢 - 已同步`;
                     }
                 }
-            } catch (e) { status.innerText = "⚠️ 走勢抓取受限，等待重試"; }
+            } catch (e) { st.innerText = "⚠️ 訊號微弱，嘗試備援通道中..."; }
         }
 
         async function selectStock(code, name) {
-            currentSymbol = code;
-            document.getElementById('current-title').innerText = `${code} ${name}`;
-            intraSeries.setData([]); intraVolSeries.setData([]);
-            candleSeries.setData([]); volumeSeries.setData([]);
-            
+            currentSymbol = code; document.getElementById('current-title').innerText = `${code} ${name}`;
+            intraSeries.setData([]); intraVolSeries.setData([]); candleSeries.setData([]); volumeSeries.setData([]);
             const start = new Date(); start.setMonth(start.getMonth() - 14);
             try {
-                const data = await fetchSafe(`https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${code}&start_date=${start.toISOString().split('T')[0]}`);
+                const data = await fetchUltraResilient(`https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${code}&start_date=${start.toISOString().split('T')[0]}`);
                 const fmt = data.data.map(d => ({ time: d.date, open: d.open, high: d.max, low: d.min, close: d.close }));
                 const vls = data.data.map(d => ({ time: d.date, value: d.Trading_Volume, color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)' }));
-                globalChartData = fmt;
-                candleSeries.setData(fmt); volumeSeries.setData(vls);
+                globalChartData = fmt; candleSeries.setData(fmt); volumeSeries.setData(vls);
                 ma5.setData(calcMA(fmt, 5)); ma20.setData(calcMA(fmt, 20)); ma60.setData(calcMA(fmt, 60));
-                chart.timeScale().fitContent();
-                updateLegend(fmt[fmt.length-1]);
+                chart.timeScale().fitContent(); updateLegend(fmt[fmt.length-1]);
             } catch (e) {}
-            await fetchQuoteAndMetrics();
-            await fetchIntraday();
+            await fetchQuoteAndMetrics(); await fetchIntraday();
         }
 
         function calcMA(d, c) {
@@ -294,12 +295,11 @@
 
         async function initStockDatabase() {
             try {
-                const data = await fetchSafe("https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo");
+                const data = await fetchUltraResilient("https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo");
                 const seen = new Set();
                 allStocks = data.data.filter(s => s.type === 'twse' && !seen.has(s.stock_id) && seen.add(s.stock_id))
                     .map(s => ({ Code: s.stock_id, Name: s.stock_name, Market: (s.stock_id.startsWith('00')||s.industry_category==='ETF')?'ETF':'上市' }));
-                const list = allStocks.filter(s => top50Codes.includes(s.Code)).sort((a,b) => a.Market==='ETF'?-1:1);
-                renderList(list, true);
+                renderList(allStocks.filter(s => top50Codes.includes(s.Code)).sort((a,b) => a.Market==='ETF'?-1:1), true);
             } catch (e) {}
             setTimeout(initChart, 100);
         }
@@ -328,11 +328,11 @@
         });
 
         initStockDatabase();
-        setInterval(fetchQuoteAndMetrics, 20000);
+        setInterval(fetchQuoteAndMetrics, 15000);
         setInterval(fetchIntraday, 60000);
         window.onresize = () => {
-            chart.resize(document.getElementById('main-chart').clientWidth, document.getElementById('main-chart').clientHeight);
-            intraChart.resize(document.getElementById('intraday-chart').clientWidth, document.getElementById('intraday-chart').clientHeight);
+            if (chart) chart.resize(document.getElementById('main-chart').clientWidth, document.getElementById('main-chart').clientHeight);
+            if (intraChart) intraChart.resize(document.getElementById('intraday-chart').clientWidth, document.getElementById('intraday-chart').clientHeight);
         };
     </script>
 </body>
