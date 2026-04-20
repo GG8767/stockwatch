@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>STOCKWATCH TERMINAL - 上市強檔版</title>
+    <title>STOCKWATCH TERMINAL - 紫色 ETF 區分版</title>
     <style>
         /* --- 專業金融介面：深色高對比 --- */
         * { box-sizing: border-box; }
@@ -23,9 +23,6 @@
         .stock-item { cursor: pointer; padding: 12px; border-radius: 8px; margin-bottom: 5px; background: #0d1117; display: flex; justify-content: space-between; align-items: center; font-size: 13px; border: 1px solid transparent; transition: 0.2s; }
         .stock-item:hover { background: #21262d; }
         .stock-item.active { border: 1px solid #58a6ff; background: #1c2128; }
-
-        .retry-btn { background: #f85149; color: white; border: none; padding: 10px; width: 100%; border-radius: 6px; cursor: pointer; font-weight: bold; margin-top: 15px; transition: 0.2s; box-shadow: 0 4px 15px rgba(248,81,73,0.2); }
-        .retry-btn:hover { background: #ff6a63; box-shadow: 0 4px 20px rgba(248,81,73,0.4); }
 
         .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; overflow-y: auto; }
         #chart-container { min-height: 520px; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; margin-bottom: 20px; }
@@ -56,17 +53,17 @@
         </div>
         <div class="status" onclick="initStockDatabase()" title="點擊強制重新連線">
             <div class="dot" id="status-dot"></div>
-            <span id="update-time">上市引擎啟動中...</span>
+            <span id="update-time">資料庫啟動中...</span>
         </div>
     </div>
 
     <div class="left-panel">
-        <input type="text" class="search-box" id="search-input" placeholder="搜尋上市股票 (如: 華邦電)...">
+        <input type="text" class="search-box" id="search-input" placeholder="搜尋上市個股或 ETF...">
         <div id="stock-list"></div>
     </div>
 
     <div class="right-panel">
-        <h2 id="current-title" style="margin: 0 0 10px 0; color: white; font-weight: 500;">請選擇股票</h2>
+        <h2 id="current-title" style="margin: 0 0 10px 0; color: white; font-weight: 500;">請選擇標的</h2>
         <div id="chart-container"></div>
         
         <div class="dashboard">
@@ -103,13 +100,13 @@
             return response.json();
         }
 
-        // 🌟 純上市的強檔 50 名單
+        // 🌟 強檔 50 加入熱門 ETF (高股息與市值型)
         const top50Codes = [
+            "0050", "0056", "00878", "00919", "00929", "00713", "006208", // ETF 天團
             "2330", "2317", "2454", "2382", "2308", "2881", "2882", "2603", "2409", "3231",
             "2344", "2303", "2891", "1301", "2002", "2412", "1216", "2886", "2884", "2618",
             "2609", "3481", "2356", "2379", "3034", "3037", "3008", "2353", "2357", "2324",
-            "3661", "6415", "3017", "2395", "2376", "2449", "2362", "2385", "3293", "6274", 
-            "8215", "2301", "2885", "2892", "2027", "2313", "2360", "2408", "2413", "3044"
+            "3661", "6415", "3017", "2395", "2376", "2449", "2362", "2385", "3293", "6274"
         ];
 
         let allStocks = [], defaultTop50List = [], currentSymbol = '', tickLog = [];
@@ -158,27 +155,34 @@
                 
                 if (json.data && json.data.length > 0) {
                     const uniqueStocks = [];
-                    const seenCodes = new Set(); // 🌟 去重複用的濾網
+                    const seenCodes = new Set();
                     
                     for (const s of json.data) {
                         // 1. 只要上市 (twse)  2. 排除權證 (購售牛熊)
                         if (s.type === 'twse' && !/購|售|牛|熊/.test(s.stock_name)) {
-                            // 3. 確保代碼沒出現過才加進去
                             if (!seenCodes.has(s.stock_id)) {
                                 seenCodes.add(s.stock_id);
-                                uniqueStocks.push({ Code: s.stock_id, Name: s.stock_name, Market: '上市' });
+                                
+                                // 🌟 強化版智慧判斷：00開頭 或 名稱含ETF 或 產業為ETF
+                                const isETF = /^00/.test(s.stock_id) || s.stock_name.includes('ETF') || s.industry_category === 'ETF';
+                                
+                                uniqueStocks.push({ 
+                                    Code: s.stock_id, 
+                                    Name: s.stock_name, 
+                                    Market: isETF ? 'ETF' : '上市' 
+                                });
                             }
                         }
                     }
                     allStocks = uniqueStocks;
                     
-                    // 篩選出強檔 50 作為首頁預設清單
+                    // 篩選出強檔首頁預設清單 (自動將 ETF 提到最前面)
                     defaultTop50List = allStocks.filter(s => top50Codes.includes(s.Code));
+                    defaultTop50List.sort((a, b) => (a.Market === 'ETF' ? -1 : 1));
                     
-                    btn.innerText = `✅ 上市專屬 (${allStocks.length} 檔)`;
+                    btn.innerText = `✅ 個股與 ETF 雙引擎就緒`;
                     dot.style.background = "#238636";
                     
-                    // 初始載入顯示強檔首頁
                     renderStockList(defaultTop50List, true);
                 } else {
                     throw new Error("無數據");
@@ -190,28 +194,37 @@
             initChart();
         }
 
+        // 🌟 渲染清單：依照屬性給予不同的顏色標籤
         function renderStockList(list, isHomePage = false) {
             const displayList = isHomePage ? list : list.slice(0, 50); 
             
-            let html = displayList.map(s => `
+            let html = displayList.map(s => {
+                // 設定 ETF 專屬的深紫色，與一般股票的深綠色做強烈區隔
+                const isETF = s.Market === 'ETF';
+                const bgColor = isETF ? '#311b92' : '#004d40';
+                const borderColor = isETF ? '#7e57c2' : '#26a69a';
+                const tagText = isETF ? 'ETF' : 'TWSE';
+
+                return `
                 <div class="stock-item ${s.Code === currentSymbol ? 'active' : ''}" onclick="selectStock('${s.Code}', '${s.Name}')">
                     <div style="display:flex; align-items:center;">
-                        <span style="font-size:10px; padding:2px 4px; border-radius:3px; margin-right:8px; 
-                                     background: #004d40; border:1px solid #26a69a">
-                            TWSE
+                        <span style="font-size:10px; padding:2px 5px; border-radius:4px; margin-right:8px; 
+                                     background: ${bgColor}; border:1px solid ${borderColor}; color: #e0e0e0; font-weight: bold; width: 45px; text-align: center;">
+                            ${tagText}
                         </span>
-                        <span style="font-weight:bold;">${s.Code}</span>
+                        <span style="font-weight:bold; font-size:14px;">${s.Code}</span>
                     </div>
-                    <span style="opacity:0.6">${s.Name}</span>
+                    <span style="opacity:0.7; font-size: 13px;">${s.Name}</span>
                 </div>
-            `).join('');
+                `;
+            }).join('');
 
-            if (isHomePage) {
-                html += `<div style="text-align:center; opacity:0.4; padding: 15px 0; font-size:12px;">👆 以上為熱門上市強檔<br>搜尋其他標的請使用上方搜尋框</div>`;
+            if (isHomePage && allStocks.length > 0) {
+                html += `<div style="text-align:center; opacity:0.4; padding: 15px 0; font-size:12px;">👆 以上為熱門 ETF 與權值股<br>搜尋其他標的請使用上方搜尋框</div>`;
             } else if (list.length > 50) {
-                html += `<div style="text-align:center; opacity:0.4; padding: 15px 0; font-size:12px;">...隱藏其餘上市標的，請繼續輸入以精確搜尋</div>`;
+                html += `<div style="text-align:center; opacity:0.4; padding: 15px 0; font-size:12px;">...隱藏其餘標的，請繼續輸入以精確搜尋</div>`;
             } else if (list.length === 0) {
-                html += `<div style="text-align:center; opacity:0.4; padding: 15px 0; font-size:12px;">找不到符合的上市標的</div>`;
+                html += `<div style="text-align:center; opacity:0.4; padding: 15px 0; font-size:12px;">找不到符合的標的</div>`;
             }
 
             document.getElementById('stock-list').innerHTML = html;
@@ -242,6 +255,8 @@
                     
                     chart.timeScale().fitContent();
                     statusText.innerHTML = "API 狀態: ✅ 歷史載入成功，啟動即時報價";
+                } else {
+                     statusText.innerHTML = `API 狀態: <span style="color:#ff9800">⚠️ 歷史資料庫無此標的數據</span>`;
                 }
             } catch (e) {
                 statusText.innerHTML = `API 狀態: <span style="color:#f85149">❌ 歷史資料庫連線超時</span>`;
@@ -285,7 +300,6 @@
             let price = 0, open = 0, high = 0, low = 0, vol = 0, dataSource = "";
 
             try {
-                // 上市股票，Yahoo 後綴為 .TW
                 const yahooSymbol = `${currentSymbol}.TW`;
                 const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=1d`;
                 const yData = await fetchSafe(yahooUrl, 5000);
