@@ -2,8 +2,9 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>STOCKWATCH TERMINAL - 年度深度版</title>
+    <title>STOCKWATCH TERMINAL - 無彈窗專業版</title>
     <style>
+        /* --- 專業金融介面：深色高對比 --- */
         * { box-sizing: border-box; }
         body {
             background-color: #0d1117; color: #d1d4dc;
@@ -21,22 +22,32 @@
         .status { margin-left: auto; display: flex; align-items: center; cursor: pointer; }
         .dot { width: 8px; height: 8px; background: #8b949e; border-radius: 50%; margin-right: 8px; }
 
+        /* 左側搜尋面板 */
         .left-panel {
             width: 280px; background-color: #161b22; border-right: 1px solid #30363d;
             padding: 50px 10px 10px 10px; display: flex; flex-direction: column;
         }
         .search-box { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: white; padding: 10px; margin-bottom: 15px; outline: none; }
         #stock-list { flex: 1; overflow-y: auto; }
-        .stock-item { cursor: pointer; padding: 12px; border-radius: 8px; margin-bottom: 5px; background: #0d1117; display: flex; justify-content: space-between; font-size: 13px; }
+        .stock-item { cursor: pointer; padding: 12px; border-radius: 8px; margin-bottom: 5px; background: #0d1117; display: flex; justify-content: space-between; font-size: 13px; border: 1px solid transparent; }
         .stock-item.active { border: 1px solid #58a6ff; background: #1c2128; }
 
+        /* 右側核心圖表 */
         .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; overflow-y: auto; }
         #chart-container { min-height: 520px; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; margin-bottom: 20px; }
 
         .dashboard { display: grid; grid-template-columns: 1fr 300px; gap: 20px; }
-        .alert-panel { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 25px; }
+        .alert-panel { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 25px; transition: 0.3s; }
         .price-display { font-size: 56px; font-weight: bold; color: white; letter-spacing: -2px; }
-        .target-tag { color: #238636; font-weight: bold; margin-left: 15px; font-size: 18px; }
+        
+        /* 目標價輸入框樣式 */
+        .target-tag { color: #238636; font-weight: bold; margin-left: 20px; font-size: 16px; }
+        .target-input { 
+            background: #0d1117; border: 1px solid #30363d; color: white; 
+            border-radius: 6px; padding: 6px 10px; width: 90px; margin-left: 8px; 
+            font-weight: bold; font-size: 16px; outline: none;
+        }
+        .target-input:focus { border-color: #238636; }
 
         .log-panel { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 15px; font-size: 12px; }
     </style>
@@ -47,34 +58,35 @@
         <span class="logo">STOCKWATCH TERMINAL</span>
         <div class="ma-legend">
             <span style="color:#f1c40f">● MA5</span><span style="color:#9b59b6">● MA20</span><span style="color:#e67e22">● MA60</span>
-            <span style="color:#26a69a; margin-left:10px;">📊 成交量 (1-YEAR DEPTH)</span>
+            <span style="color:#26a69a; margin-left:10px;">📊 成交量</span>
         </div>
         <div class="status" onclick="initStockDatabase()">
             <div class="dot" id="status-dot"></div>
-            <span id="update-time">初始化數據中...</span>
+            <span id="update-time">系統啟動中...</span>
         </div>
     </div>
 
     <div class="left-panel">
-        <input type="text" class="search-box" id="search-input" placeholder="輸入代碼搜尋全台股...">
+        <input type="text" class="search-box" id="search-input" placeholder="輸入代碼或名稱...">
         <div id="stock-list"></div>
     </div>
 
     <div class="right-panel">
-        <h2 id="current-title" style="margin: 0 0 10px 0; color: white; font-weight: 500;">請選擇股票以載入年度趨勢</h2>
+        <h2 id="current-title" style="margin: 0 0 10px 0; color: white; font-weight: 500;">請選擇股票</h2>
         <div id="chart-container"></div>
         
         <div class="dashboard">
             <div class="alert-panel" id="alert-panel">
                 <div style="display: flex; align-items: baseline;">
                     <span class="price-display" id="price-val">---</span>
-                    <span class="target-tag" id="target-val">GOAL: --</span>
+                    <span class="target-tag">GOAL:</span>
+                    <input type="number" id="target-input" class="target-input" value="0" placeholder="目標價">
                 </div>
-                <p id="status-text" style="margin: 10px 0 0 0; opacity: 0.6;">提示：點擊左側股票可載入一年內完整價量 K 線。</p>
+                <p id="status-text" style="margin: 10px 0 0 0; opacity: 0.6;">提示：點擊左側股票可載入年度趨勢，並在上方直接輸入目標價。</p>
             </div>
             
             <div class="log-panel">
-                <h4 style="margin: 0 0 10px 0; color: #ff9800;">當次同步 Tick (防快取版)</h4>
+                <h4 style="margin: 0 0 10px 0; color: #ff9800;">當次即時紀錄</h4>
                 <div id="tick-body" style="line-height: 1.6; color: #58a6ff;"></div>
             </div>
         </div>
@@ -83,9 +95,11 @@
     <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
 
     <script>
+        // 使用標準無快取設定，避免破壞官方 API 規則
+        const fetchOptions = { cache: 'no-store' };
         const twseUrl = "https://openapi.twse.com.tw/v1/stock/ALL";
         const fallbackStocks = [{Code: "2330", Name: "台積電"}, {Code: "2409", Name: "友達"}, {Code: "2317", Name: "鴻海"}];
-        let allStocks = [], currentSymbol = '', currentTarget = 0, tickLog = [];
+        let allStocks = [], currentSymbol = '', tickLog = [];
 
         const container = document.getElementById('chart-container');
         const chart = LightweightCharts.createChart(container, {
@@ -99,9 +113,7 @@
         const ma5Series = chart.addLineSeries({ color: '#f1c40f', lineWidth: 1 });
         const ma20Series = chart.addLineSeries({ color: '#9b59b6', lineWidth: 1 });
         const ma60Series = chart.addLineSeries({ color: '#e67e22', lineWidth: 2 });
-        const volumeSeries = chart.addHistogramSeries({
-            color: '#26a69a', priceFormat: { type: 'volume' }, priceScaleId: '' 
-        });
+        const volumeSeries = chart.addHistogramSeries({ color: '#26a69a', priceFormat: { type: 'volume' }, priceScaleId: '' });
 
         volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
         candlestickSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.3 } });
@@ -119,15 +131,15 @@
 
         async function initStockDatabase() {
             try {
-                // 加入 Date.now() 戳記，防止瀏覽器快取清單
-                const response = await fetch(twseUrl + "?_t=" + Date.now());
+                const response = await fetch(twseUrl, fetchOptions);
                 allStocks = await response.json();
-                document.getElementById('update-time').innerText = `✅ 已同步全台股清單`;
+                document.getElementById('update-time').innerText = `✅ 系統就緒`;
                 document.getElementById('status-dot').style.background = "#238636";
                 renderStockList(allStocks.slice(0, 50));
             } catch (err) {
                 allStocks = fallbackStocks;
-                document.getElementById('update-time').innerText = "⚠️ 官方維護，載入核心標的";
+                document.getElementById('update-time').innerText = "⚠️ 載入核心標的";
+                document.getElementById('status-dot').style.background = "#f85149";
                 renderStockList(allStocks);
             }
         }
@@ -142,91 +154,14 @@
 
         async function loadOneYearHistory(symbol) {
             const statusText = document.getElementById('status-text');
-            statusText.innerText = "⏳ 正在請求一年份雲端數據...";
+            statusText.innerText = "⏳ 正在請求雲端大數據...";
             
             const startDate = new Date();
             startDate.setMonth(startDate.getMonth() - 14);
             const finMindUrl = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${symbol}&start_date=${startDate.toISOString().split('T')[0]}`;
             
             try {
-                const res = await fetch(finMindUrl);
+                const res = await fetch(finMindUrl, fetchOptions);
                 const json = await res.json();
                 if (json.data && json.data.length > 0) {
-                    const formatted = json.data.map(d => ({ time: d.date, open: d.open, high: d.max, low: d.min, close: d.close }));
-                    const volumeData = json.data.map(d => ({ 
-                        time: d.date, value: d.Trading_Volume, 
-                        color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)' 
-                    }));
-                    
-                    candlestickSeries.setData(formatted);
-                    volumeSeries.setData(volumeData);
-                    ma5Series.setData(calculateSMA(formatted, 5));
-                    ma20Series.setData(calculateSMA(formatted, 20));
-                    ma60Series.setData(calculateSMA(formatted, 60));
-                    
-                    chart.timeScale().fitContent();
-                    statusText.innerText = "✅ 一年份年度數據加載完成";
-                } else {
-                    statusText.innerText = "❌ 雲端歷史數據暫不可用 (請稍後重試)";
-                }
-            } catch (e) {
-                statusText.innerText = "❌ 連線超時，請檢查網路";
-            }
-        }
-
-        async function selectStock(code, name) {
-            currentSymbol = code;
-            document.getElementById('current-title').innerText = `${code} ${name}`;
-            currentTarget = parseFloat(prompt(`設定 ${name} 目標價:`, "0")) || 0;
-            document.getElementById('target-val').innerText = `GOAL: ${currentTarget}`;
-            
-            tickLog = []; 
-            document.getElementById('tick-body').innerText = "";
-            await loadOneYearHistory(code);
-            await fetchRealtimeSync();
-        }
-
-        async function fetchRealtimeSync() {
-            if (!currentSymbol) return;
-            try {
-                // 🚀 核心修改：在網址後面加上時間戳記，絕對不使用舊的暫存檔案
-                const urlWithTimestamp = twseUrl + "?_t=" + Date.now();
-                const response = await fetch(urlWithTimestamp);
-                const allData = await response.json();
-                const s = allData.find(x => x.Code === currentSymbol);
-                
-                if (s) {
-                    const price = parseFloat(s.ClosingPrice);
-                    document.getElementById('price-val').innerText = price.toFixed(2);
-                    
-                    const time = new Date().toISOString().split('T')[0];
-                    candlestickSeries.update({ time, open: parseFloat(s.OpeningPrice)||price, high: parseFloat(s.HighestPrice)||price, low: parseFloat(s.LowestPrice)||price, close: price });
-                    volumeSeries.update({ time, value: parseFloat(s.TradeVolume) || 0 });
-
-                    // 確保即使價格沒變，紀錄也會印出最新的抓取時間
-                    tickLog.unshift(`[${new Date().toLocaleTimeString()}] 抓取成功 - $${price.toFixed(2)}`);
-                    if (tickLog.length > 5) tickLog.pop();
-                    document.getElementById('tick-body').innerHTML = tickLog.join('<br>');
-
-                    if (price >= currentTarget && currentTarget > 0) {
-                        document.getElementById('alert-panel').style.background = "#2a1414";
-                    } else {
-                        document.getElementById('alert-panel').style.background = "#161b22";
-                    }
-                }
-            } catch (e) {
-                 console.log("即時同步失敗", e);
-            }
-        }
-
-        document.getElementById('search-input').addEventListener('input', (e) => {
-            const k = e.target.value.toLowerCase();
-            renderStockList(allStocks.filter(s => s.Code.includes(k) || s.Name.includes(k)).slice(0, 50));
-        });
-
-        initStockDatabase();
-        setInterval(fetchRealtimeSync, 30000);
-        window.onresize = () => chart.resize(container.clientWidth, 520);
-    </script>
-</body>
-</html>
+                    const formatted = json.data.map(d => ({ time: d.date, open: d.open, high
