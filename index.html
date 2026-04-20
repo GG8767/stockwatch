@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>STOCKWATCH TERMINAL - 無彈窗專業版</title>
+    <title>STOCKWATCH TERMINAL - 專業防彈版</title>
     <style>
         /* --- 專業金融介面：深色高對比 --- */
         * { box-sizing: border-box; }
@@ -22,7 +22,6 @@
         .status { margin-left: auto; display: flex; align-items: center; cursor: pointer; }
         .dot { width: 8px; height: 8px; background: #8b949e; border-radius: 50%; margin-right: 8px; }
 
-        /* 左側搜尋面板 */
         .left-panel {
             width: 280px; background-color: #161b22; border-right: 1px solid #30363d;
             padding: 50px 10px 10px 10px; display: flex; flex-direction: column;
@@ -32,7 +31,6 @@
         .stock-item { cursor: pointer; padding: 12px; border-radius: 8px; margin-bottom: 5px; background: #0d1117; display: flex; justify-content: space-between; font-size: 13px; border: 1px solid transparent; }
         .stock-item.active { border: 1px solid #58a6ff; background: #1c2128; }
 
-        /* 右側核心圖表 */
         .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; overflow-y: auto; }
         #chart-container { min-height: 520px; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; margin-bottom: 20px; }
 
@@ -40,7 +38,6 @@
         .alert-panel { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 25px; transition: 0.3s; }
         .price-display { font-size: 56px; font-weight: bold; color: white; letter-spacing: -2px; }
         
-        /* 目標價輸入框樣式 */
         .target-tag { color: #238636; font-weight: bold; margin-left: 20px; font-size: 16px; }
         .target-input { 
             background: #0d1117; border: 1px solid #30363d; color: white; 
@@ -92,11 +89,17 @@
         </div>
     </div>
 
-    <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
 
     <script>
-        // 使用標準無快取設定，避免破壞官方 API 規則
-        const fetchOptions = { cache: 'no-store' };
+        // 🌟 內建除錯器：只要當機，立刻印出紅字告訴我們原因
+        window.onerror = function(message, source, lineno, colno, error) {
+            document.getElementById('status-text').innerHTML = `<span style="color:#f85149; font-weight:bold;">❌ 系統崩潰: ${message} (行 ${lineno})</span>`;
+            document.getElementById('update-time').innerText = "啟動失敗";
+            document.getElementById('status-dot').style.background = "#f85149";
+            return true; 
+        };
+
         const twseUrl = "https://openapi.twse.com.tw/v1/stock/ALL";
         const fallbackStocks = [{Code: "2330", Name: "台積電"}, {Code: "2409", Name: "友達"}, {Code: "2317", Name: "鴻海"}];
         let allStocks = [], currentSymbol = '', tickLog = [];
@@ -131,7 +134,8 @@
 
         async function initStockDatabase() {
             try {
-                const response = await fetch(twseUrl, fetchOptions);
+                // 回歸傳統安全防快取法，避免觸發嚴格 CORS
+                const response = await fetch(twseUrl + "?_t=" + Date.now());
                 allStocks = await response.json();
                 document.getElementById('update-time').innerText = `✅ 系統就緒`;
                 document.getElementById('status-dot').style.background = "#238636";
@@ -161,7 +165,17 @@
             const finMindUrl = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${symbol}&start_date=${startDate.toISOString().split('T')[0]}`;
             
             try {
-                const res = await fetch(finMindUrl, fetchOptions);
+                const res = await fetch(finMindUrl);
                 const json = await res.json();
                 if (json.data && json.data.length > 0) {
-                    const formatted = json.data.map(d => ({ time: d.date, open: d.open, high
+                    const formatted = json.data.map(d => ({ time: d.date, open: d.open, high: d.max, low: d.min, close: d.close }));
+                    const volumeData = json.data.map(d => ({ 
+                        time: d.date, value: d.Trading_Volume, 
+                        color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)' 
+                    }));
+                    
+                    candlestickSeries.setData(formatted);
+                    volumeSeries.setData(volumeData);
+                    ma5Series.setData(calculateSMA(formatted, 5));
+                    ma20Series.setData(calculateSMA(formatted, 20));
+                    ma60Series.setData(calculateSMA(formatted,
