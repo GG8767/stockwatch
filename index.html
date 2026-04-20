@@ -5,10 +5,10 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>STOCKWATCH TERMINAL - 游標跟隨版</title>
+    <title>STOCKWATCH TERMINAL - 專業左上圖例版</title>
     <style>
         * { box-sizing: border-box; }
-        body { background-color: #0d1117; color: #d1d4dc; font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        body { background-color: #0d1117; color: #d1d4dc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
 
         .header { position: absolute; top: 0; width: 100%; height: 40px; background: rgba(22, 27, 34, 0.9); border-bottom: 1px solid #30363d; display: flex; align-items: center; padding: 0 20px; font-size: 11px; z-index: 100; }
         .header .logo { color: #ff9800; font-weight: bold; letter-spacing: 2px; margin-right: 20px; }
@@ -33,8 +33,7 @@
         .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; overflow: hidden; }
         .title-bar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
         
-        /* 確保圖表容器是相對定位，讓浮窗可以在裡面自由移動 */
-        #chart-container { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; min-height: 0; position: relative; overflow: hidden; }
+        #chart-container { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; min-height: 0; position: relative; }
 
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -50,7 +49,6 @@
             <span class="ma-toggle" id="toggle-ma5" style="color:#f1c40f">● MA5</span>
             <span class="ma-toggle" id="toggle-ma20" style="color:#9b59b6">● MA20</span>
             <span class="ma-toggle" id="toggle-ma60" style="color:#e67e22">● MA60</span>
-            <span style="color:#26a69a; margin-left:10px; opacity:0.8; cursor:default;">📊 成交量</span>
         </div>
         <div class="status" onclick="initStockDatabase()" title="點擊強制重新連線">
             <div class="dot" id="status-dot"></div>
@@ -96,6 +94,10 @@
         let allStocks = [], defaultTop50List = [], currentSymbol = '';
         let chart, candlestickSeries, volumeSeries, ma5Series, ma20Series, ma60Series;
         let chartLegend; 
+        
+        // 🌟 儲存完整歷史數據，用來計算「昨日收盤價」與漲跌幅
+        window.globalChartData = [];
+        window.globalVolData = [];
 
         function setupMAToggles() {
             const toggles = [
@@ -114,21 +116,63 @@
         }
         setupMAToggles();
 
+        // 🌟 獨立出「渲染圖例」的函數，讓格式完全對齊你的截圖
+        function renderLegend(paramData, paramVol, paramTime) {
+            if (!paramData || paramData.open === undefined) return;
+            
+            let timeStr = typeof paramTime === 'object' ? `${paramTime.year}-${String(paramTime.month).padStart(2,'0')}-${String(paramTime.day).padStart(2,'0')}` : paramTime;
+
+            // 尋找「前一天」的收盤價，用來計算漲跌幅
+            let prevClose = paramData.open; // 預設防呆
+            if (window.globalChartData && window.globalChartData.length > 0) {
+                let idx = window.globalChartData.findIndex(x => x.time === timeStr || x.time === paramTime);
+                if (idx > 0) {
+                    prevClose = window.globalChartData[idx - 1].close;
+                }
+            }
+
+            const o = paramData.open.toFixed(2);
+            const h = paramData.high.toFixed(2);
+            const l = paramData.low.toFixed(2);
+            const c = paramData.close.toFixed(2);
+            
+            // 計算漲跌與漲跌幅
+            const changeVal = (paramData.close - prevClose);
+            const changeStr = changeVal.toFixed(2);
+            const changePct = ((changeVal / prevClose) * 100).toFixed(2);
+            
+            // 決定顏色 (上漲綠、下跌紅)
+            const candleColor = paramData.close >= paramData.open ? '#26a69a' : '#ef5350';
+            const changeColor = changeVal >= 0 ? '#26a69a' : '#ef5350';
+            const sign = changeVal > 0 ? '+' : '';
+            const v = paramVol !== undefined ? (paramVol / 1000).toFixed(2) + 'K' : '--';
+
+            // 完全模擬 TradingView 的清爽排版 (無背景、純文字)
+            chartLegend.innerHTML = `
+                <div style="font-size: 13px; margin-bottom: 6px; display: flex; align-items: center;">
+                    <span style="margin-right: 12px; font-weight: bold; color: #d1d4dc;">${timeStr}</span>
+                    <span style="margin-right: 10px;">開=<span style="color:${candleColor}">${o}</span></span>
+                    <span style="margin-right: 10px;">高=<span style="color:${candleColor}">${h}</span></span>
+                    <span style="margin-right: 10px;">低=<span style="color:${candleColor}">${l}</span></span>
+                    <span style="margin-right: 10px;">收=<span style="color:${candleColor}">${c}</span></span>
+                    <span style="color:${changeColor}; font-weight: bold; margin-left: 5px;">${sign}${changeStr} (${sign}${changePct}%)</span>
+                </div>
+                <div style="font-size: 13px;">
+                    <span style="color: #d1d4dc;">成交量 <span style="color:#ef5350">${v}</span></span>
+                </div>
+            `;
+        }
+
         function initChart() {
             if (chart) return; 
             const container = document.getElementById('chart-container');
             
-            // 🌟 建立絕對定位的跟隨浮窗
+            // 🌟 建立固定在左上角的無背景圖例
             chartLegend = document.createElement('div');
             chartLegend.style = `
-                position: absolute; display: none; z-index: 50; 
-                font-family: 'SF Pro Display', monospace; font-size: 13px; 
-                color: #d1d4dc; pointer-events: none; 
-                background: rgba(13, 17, 23, 0.85); backdrop-filter: blur(6px);
-                padding: 8px 12px; border-radius: 8px; border: 1px solid #30363d;
-                box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-                white-space: nowrap; /* 確保內容不會斷行 */
-                transition: left 0.05s ease, top 0.05s ease; /* 讓移動看起來更滑順 */
+                position: absolute; left: 15px; top: 12px; z-index: 10; 
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                color: #8b949e; pointer-events: none; 
             `;
             container.appendChild(chartLegend);
 
@@ -150,62 +194,26 @@
             volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
             candlestickSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.3 } });
 
-            // 🌟 滑鼠跟隨與邊界防撞邏輯
+            // 🌟 智慧判斷：如果滑鼠移開，就顯示最後一筆(最新)資料
             chart.subscribeCrosshairMove(param => {
-                if (param.point === undefined || !param.time || param.point.x < 0 || param.point.y < 0 || param.point.x > container.clientWidth || param.point.y > container.clientHeight) {
-                    chartLegend.style.display = 'none'; 
-                    return;
-                }
+                let targetData, targetVol, targetTime;
 
-                const data = param.seriesPrices.get(candlestickSeries);
-                const vol = param.seriesPrices.get(volumeSeries);
-
-                if (data && data.open !== undefined) {
-                    chartLegend.style.display = 'block';
-                    
-                    let dateStr = param.time;
-                    if (typeof param.time === 'object') {
-                        dateStr = `${param.time.year}-${String(param.time.month).padStart(2,'0')}-${String(param.time.day).padStart(2,'0')}`;
-                    }
-
-                    const o = data.open.toFixed(2), h = data.high.toFixed(2), l = data.low.toFixed(2), c = data.close.toFixed(2);
-                    const color = data.close >= data.open ? '#26a69a' : '#ef5350';
-                    const v = vol !== undefined ? (vol / 1000).toFixed(0) + 'K' : '--';
-
-                    chartLegend.innerHTML = `
-                        <span style="color:#8b949e; margin-right:8px;">📅 ${dateStr}</span>
-                        <span style="color:#8b949e; margin-right:4px;">開</span><span style="color:${color}; font-weight:bold; margin-right:10px;">${o}</span>
-                        <span style="color:#8b949e; margin-right:4px;">高</span><span style="color:${color}; font-weight:bold; margin-right:10px;">${h}</span>
-                        <span style="color:#8b949e; margin-right:4px;">低</span><span style="color:${color}; font-weight:bold; margin-right:10px;">${l}</span>
-                        <span style="color:#8b949e; margin-right:4px;">收</span><span style="color:${color}; font-weight:bold; margin-right:10px;">${c}</span>
-                        <span style="color:#8b949e; margin-right:4px;">量</span><span style="color:#58a6ff; font-weight:bold;">${v}</span>
-                    `;
-
-                    // --- 計算浮窗位置 (讓它出現在游標右側) ---
-                    const coordinate = param.point;
-                    const tooltipWidth = chartLegend.offsetWidth;
-                    const tooltipHeight = chartLegend.offsetHeight;
-                    
-                    // 預設放在游標右側 15px，下方 15px
-                    let leftPos = coordinate.x + 15;
-                    let topPos = coordinate.y + 15;
-
-                    // 邊界防撞：如果右側空間不夠，就把浮窗彈到游標左側
-                    if (leftPos + tooltipWidth > container.clientWidth) {
-                        leftPos = coordinate.x - tooltipWidth - 15;
-                    }
-                    // 邊界防撞：如果下方空間不夠，就把浮窗彈到游標上方
-                    if (topPos + tooltipHeight > container.clientHeight) {
-                        topPos = coordinate.y - tooltipHeight - 15;
-                    }
-
-                    // 套用座標
-                    chartLegend.style.left = leftPos + 'px';
-                    chartLegend.style.top = topPos + 'px';
-
+                if (param.point === undefined || !param.time || param.point.x < 0 || param.point.y < 0) {
+                    // 滑鼠移開，抓取陣列裡的最後一筆 (最新即時價)
+                    if (!window.globalChartData || window.globalChartData.length === 0) return;
+                    const lastIdx = window.globalChartData.length - 1;
+                    targetData = window.globalChartData[lastIdx];
+                    targetVol = window.globalVolData[lastIdx] ? window.globalVolData[lastIdx].value : 0;
+                    targetTime = targetData.time;
                 } else {
-                    chartLegend.style.display = 'none';
+                    // 滑鼠懸停，抓取當前游標指到的 K 棒
+                    targetData = param.seriesPrices.get(candlestickSeries);
+                    const volObj = param.seriesPrices.get(volumeSeries);
+                    targetVol = volObj !== undefined ? volObj : 0;
+                    targetTime = param.time;
                 }
+
+                renderLegend(targetData, targetVol, targetTime);
             });
         }
 
@@ -297,6 +305,10 @@
                         color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)' 
                     }));
                     
+                    // 寫入全域變數，供圖例計算使用
+                    window.globalChartData = formatted;
+                    window.globalVolData = volumeData;
+
                     candlestickSeries.setData(formatted);
                     volumeSeries.setData(volumeData);
                     ma5Series.setData(calculateSMA(formatted, 5));
@@ -304,6 +316,11 @@
                     ma60Series.setData(calculateSMA(formatted, 60));
                     
                     chart.timeScale().fitContent();
+                    
+                    // 預設顯示最新一天的數據
+                    if (formatted.length > 0) {
+                        renderLegend(formatted[formatted.length-1], volumeData[volumeData.length-1].value, formatted[formatted.length-1].time);
+                    }
                     
                     if(document.getElementById('toggle-ma5').classList.contains('disabled')) ma5Series.applyOptions({ visible: false });
                     if(document.getElementById('toggle-ma20').classList.contains('disabled')) ma20Series.applyOptions({ visible: false });
@@ -317,10 +334,11 @@
             document.getElementById('current-title').innerText = `${code} ${name}`;
             document.getElementById('current-price').innerText = "---";
             
-            if (chartLegend) chartLegend.style.display = 'none'; 
+            if (chartLegend) chartLegend.innerHTML = '<span style="color:#8b949e;">載入資料中...</span>';
             
             candlestickSeries.setData([]); volumeSeries.setData([]);
             ma5Series.setData([]); ma20Series.setData([]); ma60Series.setData([]);
+            window.globalChartData = []; window.globalVolData = [];
 
             const keyword = document.getElementById('search-input').value.trim().toLowerCase();
             if (keyword === "") renderStockList(defaultTop50List, true);
@@ -331,7 +349,7 @@
         }
 
         async function fetchRealtimeSync() {
-            if (!currentSymbol) return;
+            if (!currentSymbol || !window.globalChartData || window.globalChartData.length === 0) return;
             let price = 0, open = 0, high = 0, low = 0, vol = 0;
 
             try {
@@ -352,8 +370,20 @@
             if (price > 0) {
                 document.getElementById('current-price').innerText = `$${price.toFixed(2)}`;
                 const time = new Date().toISOString().split('T')[0];
-                candlestickSeries.update({ time, open, high, low, close: price });
+                
+                const newData = { time, open, high, low, close: price };
+                candlestickSeries.update(newData);
                 volumeSeries.update({ time, value: vol });
+                
+                // 更新全域數據
+                const lastIdx = window.globalChartData.length - 1;
+                if (window.globalChartData[lastIdx].time === time) {
+                    window.globalChartData[lastIdx] = newData;
+                    if(window.globalVolData[lastIdx]) window.globalVolData[lastIdx].value = vol;
+                } else {
+                    window.globalChartData.push(newData);
+                    window.globalVolData.push({ time, value: vol });
+                }
             }
         }
 
