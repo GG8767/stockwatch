@@ -5,43 +5,53 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>STOCKWATCH TERMINAL - 航太級穩定版</title>
+    <title>STOCKWATCH TERMINAL - 旗艦專業版</title>
     <style>
         * { box-sizing: border-box; }
-        body { background-color: #0d1117; color: #d1d4dc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        body { background-color: #0d1117; color: #d1d4dc; font-family: 'Segoe UI', -apple-system, sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
 
-        .header { position: absolute; top: 0; width: 100%; height: 40px; background: rgba(22, 27, 34, 0.9); border-bottom: 1px solid #30363d; display: flex; align-items: center; padding: 0 20px; font-size: 11px; z-index: 100; }
-        .header .logo { color: #ff9800; font-weight: bold; letter-spacing: 2px; margin-right: 20px; }
-        
+        /* 頂部 Logo 與 均線開關 */
+        .header { position: absolute; top: 0; width: 100%; height: 40px; background: rgba(22, 27, 34, 0.95); border-bottom: 1px solid #30363d; display: flex; align-items: center; padding: 0 20px; font-size: 11px; z-index: 100; }
+        .header .logo { color: #ff9800; font-weight: bold; letter-spacing: 2px; margin-right: 25px; }
         .ma-legend { display: flex; gap: 15px; font-size: 12px; font-weight: bold; }
         .ma-toggle { cursor: pointer; user-select: none; transition: 0.2s; opacity: 1; padding: 2px 5px; border-radius: 4px; }
         .ma-toggle:hover { background: rgba(255,255,255,0.1); }
         .ma-toggle.disabled { opacity: 0.3; text-decoration: line-through; }
-
-        .status { margin-left: auto; display: flex; align-items: center; cursor: pointer; padding: 5px 10px; border-radius: 4px; }
+        .status { margin-left: auto; display: flex; align-items: center; font-size: 12px; color: #8b949e; }
         .dot { width: 8px; height: 8px; background: #238636; border-radius: 50%; margin-right: 8px; box-shadow: 0 0 8px #238636; }
 
-        .left-panel { width: 290px; background-color: #161b22; border-right: 1px solid #30363d; padding: 50px 10px 10px 10px; display: flex; flex-direction: column; }
+        /* 左側清單 */
+        .left-panel { width: 300px; background-color: #161b22; border-right: 1px solid #30363d; padding: 50px 10px 10px 10px; display: flex; flex-direction: column; }
         .search-box { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: white; padding: 10px; margin-bottom: 15px; outline: none; }
-        #stock-list { flex: 1; overflow-y: auto; padding-right: 5px; }
-        
+        #stock-list { flex: 1; overflow-y: auto; }
         .stock-item { cursor: pointer; padding: 12px; border-radius: 8px; margin-bottom: 5px; background: #0d1117; display: flex; justify-content: space-between; align-items: center; font-size: 13px; border: 1px solid transparent; transition: 0.2s; }
         .stock-item:hover { background: #21262d; }
         .stock-item.active { border: 1px solid #58a6ff; background: #1c2128; }
 
+        /* 右側主視窗 */
         .right-panel { flex: 1; padding: 50px 20px 20px 20px; display: flex; flex-direction: column; overflow: hidden; }
-        .title-bar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+        .title-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         
-        #chart-wrapper { display: flex; flex-direction: column; flex: 1; gap: 15px; overflow: hidden; }
-        #main-chart { flex: 7; position: relative; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; overflow: hidden; }
-        #intraday-chart { flex: 3; position: relative; background: #0d1117; border: 1px solid #30363d; border-radius: 12px; overflow: hidden; }
+        #chart-wrapper { display: flex; flex-direction: column; flex: 1; gap: 10px; overflow: hidden; }
+        #main-chart { flex: 6; position: relative; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+        #intraday-chart { flex: 3; position: relative; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
 
-        .intraday-header { position: absolute; left: 15px; top: 12px; z-index: 10; display: flex; align-items: center; gap: 12px; }
-        .range-select { background-color: #161b22; color: #58a6ff; border: 1px solid #30363d; border-radius: 4px; padding: 4px 8px; font-size: 13px; font-weight: bold; outline: none; cursor: pointer; }
-        .intraday-watermark { font-size: 12px; color: #8b949e; pointer-events: none; font-weight: 500; letter-spacing: 0.5px; }
+        .intraday-header { position: absolute; left: 12px; top: 10px; z-index: 10; display: flex; align-items: center; gap: 10px; }
+        .range-select { background: #161b22; color: #58a6ff; border: 1px solid #30363d; border-radius: 4px; padding: 3px 6px; font-size: 12px; font-weight: bold; outline: none; cursor: pointer; }
 
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
+        /* 🌟 專業數據牆 (Metrics Grid) */
+        .metrics-grid { 
+            display: grid; grid-template-columns: repeat(6, 1fr); 
+            gap: 1px; background: #30363d; border: 1px solid #30363d; 
+            border-radius: 4px; margin-top: 10px; font-size: 12px;
+        }
+        .metric-item { background: #161b22; padding: 8px 10px; display: flex; justify-content: space-between; }
+        .m-label { color: #8b949e; }
+        .m-val { color: #ffffff; font-family: monospace; font-weight: bold; }
+        .m-up { color: #26a69a; }
+        .m-down { color: #ef5350; }
+
+        ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 10px; }
     </style>
 </head>
@@ -54,22 +64,23 @@
             <span class="ma-toggle" id="toggle-ma20" style="color:#9b59b6">● MA20</span>
             <span class="ma-toggle" id="toggle-ma60" style="color:#e67e22">● MA60</span>
         </div>
-        <div class="status">
-            <div class="dot" id="status-dot"></div>
-            <span id="update-time">系統監控中</span>
-        </div>
+        <div class="status"><div class="dot"></div>系統就緒</div>
     </div>
 
     <div class="left-panel">
-        <input type="text" class="search-box" id="search-input" placeholder="搜尋上市個股或 ETF...">
+        <input type="text" class="search-box" id="search-input" placeholder="搜尋代號或名稱...">
         <div id="stock-list"></div>
     </div>
 
     <div class="right-panel">
         <div class="title-bar">
-            <h2 id="current-title" style="margin: 0; color: white; font-weight: 500;">請選擇標的</h2>
-            <h2 id="current-price" style="margin: 0; color: #58a6ff; font-weight: bold; letter-spacing: 1px;"></h2>
+            <h2 id="current-title" style="margin: 0; color: white; font-weight: 600; font-size: 24px;">請選擇標的</h2>
+            <div id="current-price-area" style="text-align: right;">
+                <div id="current-price" style="font-size: 28px; font-weight: bold; color: #58a6ff;">---</div>
+                <div id="current-change" style="font-size: 14px;">-- (--)</div>
+            </div>
         </div>
+        
         <div id="chart-wrapper">
             <div id="main-chart"></div>
             <div id="intraday-chart">
@@ -77,21 +88,32 @@
                     <select id="intraday-range" class="range-select">
                         <option value="1d" selected>當日</option>
                         <option value="5d">五日</option>
-                        <option value="10d">十日</option>
                         <option value="1mo">近月</option>
                     </select>
-                    <div class="intraday-watermark" id="intraday-status">📊 初始化中...</div>
+                    <span id="intraday-status" style="font-size:12px; color:#8b949e; font-weight:bold;">📊 分時走勢</span>
                 </div>
             </div>
+        </div>
+
+        <div class="metrics-grid" id="metrics-grid">
+            <div class="metric-item"><span class="m-label">成交</span><span class="m-val" id="m-price">--</span></div>
+            <div class="metric-item"><span class="m-label">漲跌</span><span class="m-val" id="m-change">--</span></div>
+            <div class="metric-item"><span class="m-label">幅度</span><span class="m-val" id="m-pct">--</span></div>
+            <div class="metric-item"><span class="m-label">開盤</span><span class="m-val" id="m-open">--</span></div>
+            <div class="metric-item"><span class="m-label">最高</span><span class="m-val m-up" id="m-high">--</span></div>
+            <div class="metric-item"><span class="m-label">最低</span><span class="m-val m-down" id="m-low">--</span></div>
+            <div class="metric-item"><span class="m-label">單量</span><span class="m-val" id="m-single" style="color:#f1c40f">--</span></div>
+            <div class="metric-item"><span class="m-label">總量</span><span class="m-val" id="m-total" style="color:#f1c40f">--</span></div>
+            <div class="metric-item"><span class="m-label">振幅</span><span class="m-val" id="m-swing">--</span></div>
+            <div class="metric-item"><span class="m-label">昨收</span><span class="m-val" id="m-prev">--</span></div>
+            <div class="metric-item"><span class="m-label">買進</span><span class="m-val m-up" id="m-buy">--</span></div>
+            <div class="metric-item"><span class="m-label">賣出</span><span class="m-val m-down" id="m-sell">--</span></div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
 
     <script>
-        window.onerror = function(msg) { console.warn("Caught:", msg); return true; };
-
-        // 🌟 強化版 Fetch：支援 CORS Proxy 轉機
         async function fetchSafe(url, timeoutMs = 8000, useProxy = false) {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -102,242 +124,158 @@
                 if (!response.ok) throw new Error("HTTP " + response.status);
                 const data = await response.json();
                 return useProxy ? JSON.parse(data.contents) : data;
-            } catch (e) {
-                clearTimeout(id);
-                throw e;
-            }
+            } catch (e) { clearTimeout(id); throw e; }
         }
 
-        const top50Codes = ["0050", "0056", "00878", "00919", "00929", "00713", "006208", "2330", "2317", "2454", "2382", "2308", "2881", "2882", "2603", "2409", "3231", "2344", "2303", "2891", "1301", "2002", "2412", "1216", "2886", "2884", "2618", "2609", "3481", "2356", "2379", "3034", "3037", "3008", "2353", "2357", "2324", "3661", "6415", "3017", "2395", "2376", "2449", "2362", "2385", "3293", "6274"];
-        let allStocks = [], defaultTop50List = [], currentSymbol = '';
-        let chart, candlestickSeries, volumeSeries, ma5Series, ma20Series, ma60Series;
-        let chartLegend, priceTracker, intradayChart, intradaySeries, intradayTracker;
-        window.globalChartData = []; 
-
-        function setupMAToggles() {
-            const toggles = [{ id: 'toggle-ma5', series: () => ma5Series }, { id: 'toggle-ma20', series: () => ma20Series }, { id: 'toggle-ma60', series: () => ma60Series }];
-            toggles.forEach(t => {
-                document.getElementById(t.id).addEventListener('click', function() {
-                    this.classList.toggle('disabled');
-                    const series = t.series();
-                    if (series) series.applyOptions({ visible: !this.classList.contains('disabled') });
-                });
-            });
-        }
-        setupMAToggles();
-
-        function renderLegend(paramData, paramVol, paramTime) {
-            if (!paramData || paramData.open === undefined) return;
-            let timeStr = typeof paramTime === 'object' ? `${paramTime.year}-${String(paramTime.month).padStart(2,'0')}-${String(paramTime.day).padStart(2,'0')}` : paramTime;
-            let prevClose = paramData.open; 
-            if (window.globalChartData.length > 0) {
-                let idx = window.globalChartData.findIndex(x => x.time === timeStr || x.time === paramTime);
-                if (idx > 0) prevClose = window.globalChartData[idx - 1].close;
-            }
-            const o = paramData.open.toFixed(2), h = paramData.high.toFixed(2), l = paramData.low.toFixed(2), c = paramData.close.toFixed(2);
-            const changeVal = (paramData.close - prevClose);
-            const changePct = ((changeVal / prevClose) * 100).toFixed(2);
-            const candleColor = paramData.close >= paramData.open ? '#26a69a' : '#ef5350';
-            const changeColor = changeVal >= 0 ? '#26a69a' : '#ef5350';
-            const v = paramVol !== undefined ? (paramVol / 1000).toFixed(2) + 'K' : '--';
-
-            chartLegend.innerHTML = `<div style="font-size: 13px; margin-bottom: 6px; display: flex; align-items: center;"><span style="margin-right: 12px; font-weight: bold; color: #d1d4dc;">${timeStr}</span><span style="margin-right: 10px;">開=<span style="color:${candleColor}">${o}</span></span><span style="margin-right: 10px;">高=<span style="color:${candleColor}">${h}</span></span><span style="margin-right: 10px;">低=<span style="color:${candleColor}">${l}</span></span><span style="margin-right: 10px;">收=<span style="color:${candleColor}">${c}</span></span><span style="color:${changeColor}; font-weight: bold;">${changeVal >= 0 ? '+' : ''}${changeVal.toFixed(2)} (${changePct}%)</span></div><div style="font-size: 13px;"><span style="color: #d1d4dc;">量 <span style="color:#ef5350">${v}</span></span></div>`;
-        }
+        const top50Codes = ["0050", "0056", "00878", "00919", "00929", "2330", "2317", "2454", "2382", "2308", "2881", "2882", "2603", "2409", "3231", "2344", "2303", "2891", "1301", "2002", "2412", "1216", "2886", "2884", "2618", "2609", "3481", "2356", "2379", "3034", "3037", "3008", "2353", "2357", "2324", "3661", "6415", "3017", "2395", "2376", "2449", "2362", "2385", "3293", "6274"];
+        let allStocks = [], currentSymbol = '', globalChartData = [];
+        let chart, candleSeries, volumeSeries, ma5, ma20, ma60, legend;
+        let intraChart, intraSeries, intraVolSeries, priceTracker;
 
         function initChart() {
             if (chart) return;
-            const mainContainer = document.getElementById('main-chart');
-            chartLegend = document.createElement('div');
-            chartLegend.style = `position: absolute; left: 15px; top: 12px; z-index: 10; font-family: sans-serif; pointer-events: none;`;
-            mainContainer.appendChild(chartLegend);
+            const mainBox = document.getElementById('main-chart');
+            legend = document.createElement('div');
+            legend.style = `position: absolute; left: 15px; top: 12px; z-index: 10; font-family: monospace; font-size: 13px; color: #8b949e; pointer-events: none;`;
+            mainBox.appendChild(legend);
 
-            priceTracker = document.createElement('div');
-            priceTracker.style = `position: absolute; display: none; z-index: 50; font-family: monospace; font-size: 13px; font-weight: bold; color: #ffffff; pointer-events: none; background: #2962ff; padding: 4px 8px; border-radius: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.4);`;
-            mainContainer.appendChild(priceTracker);
-
-            chart = LightweightCharts.createChart(mainContainer, {
-                width: mainContainer.clientWidth, height: mainContainer.clientHeight,
+            chart = LightweightCharts.createChart(mainBox, {
+                width: mainBox.clientWidth, height: mainBox.clientHeight,
                 layout: { backgroundColor: 'transparent', textColor: '#d1d4dc' },
                 grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
                 timeScale: { rightOffset: 5, barSpacing: 6 },
                 crosshair: { mode: LightweightCharts.CrosshairMode.Normal }
             });
 
-            candlestickSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350' });
-            ma5Series = chart.addLineSeries({ color: '#f1c40f', lineWidth: 1 });
-            ma20Series = chart.addLineSeries({ color: '#9b59b6', lineWidth: 1 });
-            ma60Series = chart.addLineSeries({ color: '#e67e22', lineWidth: 2 });
+            candleSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350' });
+            ma5 = chart.addLineSeries({ color: '#f1c40f', lineWidth: 1 });
+            ma20 = chart.addLineSeries({ color: '#9b59b6', lineWidth: 1 });
+            ma60 = chart.addLineSeries({ color: '#e67e22', lineWidth: 1.5 });
             volumeSeries = chart.addHistogramSeries({ color: '#26a69a', priceFormat: { type: 'volume' }, priceScaleId: '' });
-            volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
-            candlestickSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.3 } });
+            volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
 
-            chart.subscribeCrosshairMove(param => {
-                let targetData, targetVol, targetTime;
-                if (!param.point || !param.time || param.point.x < 0 || param.point.y < 0) {
-                    if (window.globalChartData.length === 0) return;
-                    targetData = window.globalChartData[window.globalChartData.length - 1];
-                    targetTime = targetData.time; priceTracker.style.display = 'none';
-                } else {
-                    targetData = param.seriesPrices.get(candlestickSeries);
-                    targetVol = param.seriesPrices.get(volumeSeries) || 0;
-                    targetTime = param.time;
-                    const ep = candlestickSeries.coordinateToPrice(param.point.y);
-                    if (targetData && ep) {
-                        const hY = candlestickSeries.priceToCoordinate(targetData.high), lY = candlestickSeries.priceToCoordinate(targetData.low);
-                        if (param.point.y >= (hY - 5) && param.point.y <= (lY + 5)) {
-                            priceTracker.style.display = 'block'; priceTracker.innerHTML = ep.toFixed(2);
-                            priceTracker.style.left = (param.point.x + 15) + 'px'; priceTracker.style.top = (param.point.y + 15) + 'px';
-                        } else priceTracker.style.display = 'none';
-                    }
-                }
-                renderLegend(targetData, targetVol, targetTime);
-            });
-
-            const intraContainer = document.getElementById('intraday-chart');
-            intradayTracker = document.createElement('div');
-            intradayTracker.style = `position: absolute; display: none; z-index: 50; font-family: monospace; font-size: 13px; font-weight: bold; color: #ffffff; pointer-events: none; background: #e67e22; padding: 4px 8px; border-radius: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.4);`;
-            intraContainer.appendChild(intradayTracker);
-
-            intradayChart = LightweightCharts.createChart(intraContainer, {
-                width: intraContainer.clientWidth, height: intraContainer.clientHeight,
+            // 走勢圖初始化
+            const intraBox = document.getElementById('intraday-chart');
+            intraChart = LightweightCharts.createChart(intraBox, {
+                width: intraBox.clientWidth, height: intraBox.clientHeight,
                 layout: { backgroundColor: 'transparent', textColor: '#8b949e' },
                 grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
-                timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 5 },
-                crosshair: { mode: LightweightCharts.CrosshairMode.Normal }
+                timeScale: { timeVisible: true, secondsVisible: false },
             });
-            intradaySeries = intradayChart.addAreaSeries({ lineColor: '#58a6ff', topColor: 'rgba(88, 166, 255, 0.4)', bottomColor: 'rgba(88, 166, 255, 0.0)', lineWidth: 2 });
-            
-            intradayChart.subscribeCrosshairMove(param => {
-                if (!param.point || !param.time || param.point.x < 0 || param.point.y < 0) intradayTracker.style.display = 'none';
-                else {
-                    const ep = intradaySeries.coordinateToPrice(param.point.y);
-                    if (ep) {
-                        intradayTracker.style.display = 'block'; intradayTracker.innerHTML = ep.toFixed(2);
-                        intradayTracker.style.left = (param.point.x + 15) + 'px'; intradayTracker.style.top = (param.point.y + 15) + 'px';
-                    }
-                }
+            intraSeries = intraChart.addAreaSeries({ lineColor: '#58a6ff', topColor: 'rgba(88, 166, 255, 0.3)', bottomColor: 'rgba(88, 166, 255, 0)', lineWidth: 2 });
+            intraVolSeries = intraChart.addHistogramSeries({ color: 'rgba(88, 166, 255, 0.5)', priceFormat: { type: 'volume' }, priceScaleId: '' });
+            intraVolSeries.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0 } });
+
+            chart.subscribeCrosshairMove(param => {
+                if (!param.point || !param.time) { updateLegend(globalChartData[globalChartData.length-1]); return; }
+                const d = param.seriesPrices.get(candleSeries);
+                if(d) updateLegend({...d, time: param.time});
             });
         }
 
-        async function initStockDatabase() {
+        function updateLegend(d) {
+            if(!d) return;
+            const color = d.close >= d.open ? '#26a69a' : '#ef5350';
+            legend.innerHTML = `<span style="font-weight:bold; color:#d1d4dc; margin-right:15px;">${d.time}</span>
+                開=<span style="color:${color}">${d.open.toFixed(2)}</span> 
+                高=<span style="color:${color}">${d.high.toFixed(2)}</span> 
+                低=<span style="color:${color}">${d.low.toFixed(2)}</span> 
+                收=<span style="color:${color}">${d.close.toFixed(2)}</span>`;
+        }
+
+        async function fetchRealtime() {
+            if (!currentSymbol) return;
             try {
-                const json = await fetchSafe("https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo");
-                const seen = new Set();
-                allStocks = json.data.filter(s => s.type === 'twse' && !/購|售|牛|熊/.test(s.stock_name) && !seen.has(s.stock_id) && seen.add(s.stock_id))
-                    .map(s => ({ Code: s.stock_id, Name: s.stock_name, Market: (s.stock_id.startsWith('00') || s.industry_category === 'ETF') ? 'ETF' : 'TWSE' }));
-                defaultTop50List = allStocks.filter(s => top50Codes.includes(s.Code)).sort((a,b) => (a.Market==='ETF'?-1:1));
-                renderStockList(defaultTop50List, true);
-            } catch (e) {}
-            setTimeout(initChart, 100);
-        }
+                // 1. 抓取報價與更新數據牆
+                const qUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${currentSymbol}.TW`;
+                let qData;
+                try { qData = await fetchSafe(qUrl, 4000); } catch(e) { qData = await fetchSafe(qUrl, 6000, true); }
+                const r = qData.quoteResponse.result[0];
+                if (r) {
+                    const price = r.regularMarketPrice;
+                    const change = r.regularMarketChange;
+                    const pct = r.regularMarketChangePercent;
+                    const color = change >= 0 ? '#26a69a' : '#ef5350';
+                    const sign = change >= 0 ? '+' : '';
 
-        function renderStockList(list, isHome = false) {
-            document.getElementById('stock-list').innerHTML = (isHome ? list : list.slice(0,50)).map(s => `
-                <div class="stock-item ${s.Code === currentSymbol ? 'active' : ''}" onclick="selectStock('${s.Code}', '${s.Name}')">
-                    <div style="display:flex; align-items:center;">
-                        <span style="font-size:10px; padding:2px 5px; border-radius:4px; margin-right:8px; background:${s.Market==='ETF'?'#311b92':'#004d40'}; border:1px solid ${s.Market==='ETF'?'#7e57c2':'#26a69a'}; font-weight:bold; width:45px; text-align:center;">${s.Market}</span>
-                        <span style="font-weight:bold; font-size:14px;">${s.Code}</span>
-                    </div>
-                    <span style="opacity:0.7; font-size: 13px;">${s.Name}</span>
-                </div>`).join('');
+                    document.getElementById('current-price').innerText = price.toFixed(2);
+                    document.getElementById('current-price').style.color = color;
+                    document.getElementById('current-change').innerText = `${sign}${change.toFixed(2)} (${sign}${pct.toFixed(2)}%)`;
+                    document.getElementById('current-change').style.color = color;
+
+                    // 數據牆填充
+                    document.getElementById('m-price').innerText = price.toFixed(2);
+                    document.getElementById('m-change').innerText = `${sign}${change.toFixed(2)}`;
+                    document.getElementById('m-pct').innerText = `${sign}${pct.toFixed(2)}%`;
+                    document.getElementById('m-open').innerText = (r.regularMarketOpen || price).toFixed(2);
+                    document.getElementById('m-high').innerText = (r.regularMarketDayHigh || price).toFixed(2);
+                    document.getElementById('m-low').innerText = (r.regularMarketDayLow || price).toFixed(2);
+                    document.getElementById('m-total').innerText = (r.regularMarketVolume / 1000).toFixed(0) + ' K';
+                    document.getElementById('m-prev').innerText = r.regularMarketPreviousClose.toFixed(2);
+                    document.getElementById('m-buy').innerText = (r.bid || price).toFixed(2);
+                    document.getElementById('m-sell').innerText = (r.ask || price).toFixed(2);
+                    document.getElementById('m-swing').innerText = (( (r.regularMarketDayHigh - r.regularMarketDayLow) / r.regularMarketPreviousClose) * 100).toFixed(2) + '%';
+                }
+
+                // 2. 走勢圖智慧載入
+                const range = document.getElementById('intraday-range').value;
+                const fetchRange = range === '1d' ? '7d' : range;
+                const fetchInt = range === '1d' ? '1m' : (range === '5d' ? '5m' : '30m');
+                const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${currentSymbol}.TW?interval=${fetchInt}&range=${fetchRange}`;
+                
+                let yData;
+                try { yData = await fetchSafe(yUrl, 5000); } catch(e) { yData = await fetchSafe(yUrl, 8000, true); }
+                const res = yData.chart.result[0];
+                if (res && res.timestamp) {
+                    const lastDate = new Date(res.timestamp[res.timestamp.length-1]*1000).toDateString();
+                    let points = [], vols = [];
+                    for(let i=0; i<res.timestamp.length; i++) {
+                        const c = res.indicators.quote[0].close[i];
+                        const v = res.indicators.quote[0].volume[i];
+                        if(c !== null) {
+                            if(range !== '1d' || new Date(res.timestamp[i]*1000).toDateString() === lastDate) {
+                                points.push({ time: res.timestamp[i], value: c });
+                                vols.push({ time: res.timestamp[i], value: v });
+                            }
+                        }
+                    }
+                    intraSeries.setData(points);
+                    intraVolSeries.setData(vols);
+                    intraChart.timeScale().fitContent();
+
+                    // 加入最高最低標註
+                    const maxV = Math.max(...points.map(p => p.value));
+                    const minV = Math.min(...points.map(p => p.value));
+                    intraSeries.setMarkers([
+                        { time: points.find(p => p.value === maxV).time, position: 'aboveBar', color: '#ef5350', shape: 'arrowDown', text: '高 ' + maxV.toFixed(2) },
+                        { time: points.find(p => p.value === minV).time, position: 'belowBar', color: '#26a69a', shape: 'arrowUp', text: '低 ' + minV.toFixed(2) }
+                    ]);
+                    document.getElementById('intraday-status').innerText = `📊 分時走勢 - ${new Date(points[0].time*1000).toLocaleDateString()}`;
+                }
+            } catch (e) { document.getElementById('intraday-status').innerText = "⚠️ API 忙碌中，等待重試"; }
         }
 
         async function selectStock(code, name) {
-            currentSymbol = code; document.getElementById('current-title').innerText = `${code} ${name}`;
-            document.getElementById('current-price').innerText = "---";
-            document.getElementById('intraday-status').innerText = "⚡ 正在連接備援通道...";
-            candlestickSeries.setData([]); volumeSeries.setData([]); intradaySeries.setData([]); window.globalChartData = [];
-            
-            const k = document.getElementById('search-input').value.trim().toLowerCase();
-            renderStockList(k === "" ? defaultTop50List : allStocks.filter(s => s.Code.includes(k) || s.Name.includes(k)), k === "");
+            currentSymbol = code;
+            document.getElementById('current-title').innerText = `${code} ${name}`;
+            intraSeries.setData([]); intraVolSeries.setData([]);
+            candleSeries.setData([]); volumeSeries.setData([]);
             
             const start = new Date(); start.setMonth(start.getMonth() - 14);
             try {
-                const json = await fetchSafe(`https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${code}&start_date=${start.toISOString().split('T')[0]}`);
-                const fmt = json.data.map(d => ({ time: d.date, open: d.open, high: d.max, low: d.min, close: d.close }));
-                const vols = json.data.map(d => ({ time: d.date, value: d.Trading_Volume, color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)' }));
-                window.globalChartData = fmt;
-                candlestickSeries.setData(fmt); volumeSeries.setData(vols);
-                ma5Series.setData(calculateSMA(fmt, 5)); ma20Series.setData(calculateSMA(fmt, 20)); ma60Series.setData(calculateSMA(fmt, 60));
+                const data = await fetchSafe(`https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${code}&start_date=${start.toISOString().split('T')[0]}`);
+                const fmt = data.data.map(d => ({ time: d.date, open: d.open, high: d.max, low: d.min, close: d.close }));
+                const vls = data.data.map(d => ({ time: d.date, value: d.Trading_Volume, color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)' }));
+                globalChartData = fmt;
+                candleSeries.setData(fmt); volumeSeries.setData(vls);
+                ma5.setData(calcMA(fmt, 5)); ma20.setData(calcMA(fmt, 20)); ma60.setData(calcMA(fmt, 60));
                 chart.timeScale().fitContent();
-                if (fmt.length > 0) renderLegend(fmt[fmt.length-1], vols[vols.length-1].value, fmt[fmt.length-1].time);
+                updateLegend(fmt[fmt.length-1]);
             } catch (e) {}
-            await fetchRealtimeSync();
+            await fetchRealtime();
         }
 
-        // 🌟 核心：五維度冗餘抓取引擎
-        async function fetchRealtimeSync() {
-            if (!currentSymbol) return;
-
-            // 1. 頂部報價更新 (Yahoo Quote + Proxy 備援)
-            try {
-                let qUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${currentSymbol}.TW`;
-                let qData;
-                try { qData = await fetchSafe(qUrl, 4000); } 
-                catch(e) { qData = await fetchSafe(qUrl, 6000, true); } // 失敗就轉機
-
-                const r = qData.quoteResponse.result[0];
-                if (r) {
-                    const p = r.regularMarketPrice;
-                    document.getElementById('current-price').innerText = `$${p.toFixed(2)}`;
-                    candlestickSeries.update({ time: new Date().toISOString().split('T')[0], open: r.regularMarketOpen||p, high: r.regularMarketDayHigh||p, low: r.regularMarketDayLow||p, close: p });
-                }
-            } catch (e) {}
-
-            // 2. 下方走勢圖 (五層備援：Yahoo -> Yahoo Proxy -> FinMind -> Day Fallback)
-            const range = document.getElementById('intraday-range').value;
-            const status = document.getElementById('intraday-status');
-            
-            const fetchChart = async (url, isProxy = false) => {
-                const d = await fetchSafe(url, isProxy ? 8000 : 5000, isProxy);
-                const res = d.chart.result[0];
-                if (!res || !res.timestamp) throw new Error("No Data");
-                const uniqueDates = [...new Set(res.timestamp.map(ts => new Date(ts * 1000).toDateString()))];
-                const keep = range === '1d' ? 1 : (range === '5d' ? 5 : (range === '10d' ? 10 : 999));
-                const targetDates = uniqueDates.slice(-keep);
-                let arr = [];
-                for (let i = 0; i < res.timestamp.length; i++) {
-                    const c = res.indicators.quote[0].close[i];
-                    if (c !== null && targetDates.includes(new Date(res.timestamp[i] * 1000).toDateString())) {
-                        arr.push({ time: res.timestamp[i], value: c });
-                    }
-                }
-                return arr;
-            };
-
-            try {
-                let fetchRange = range === '1d' ? '7d' : (range === '5d' ? '7d' : '1mo');
-                let fetchInt = range === '1d' ? '1m' : (range === '5d' ? '5m' : (range === '10d' ? '15m' : '30m'));
-                let yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${currentSymbol}.TW?interval=${fetchInt}&range=${fetchRange}`;
-                
-                let dataArr;
-                try { dataArr = await fetchChart(yUrl); status.innerText = "📊 走勢已同步 (Yahoo 直接連線)"; } 
-                catch(e) { dataArr = await fetchChart(yUrl, true); status.innerText = "📊 走勢已同步 (透過轉機伺服器)"; }
-
-                if (dataArr && dataArr.length > 0) {
-                    intradaySeries.setData(dataArr);
-                    intradayChart.timeScale().fitContent();
-                    return;
-                }
-            } catch (err) {
-                // 最後手段：抓不到 1分K，就用日K資料補點
-                if (window.globalChartData.length > 0) {
-                    const last = window.globalChartData[window.globalChartData.length - 1];
-                    const fallback = [
-                        { time: new Date(last.time).getTime()/1000, value: last.open },
-                        { time: new Date(last.time).getTime()/1000 + 3600, value: last.low },
-                        { time: new Date(last.time).getTime()/1000 + 7200, value: last.high },
-                        { time: new Date(last.time).getTime()/1000 + 10800, value: last.close }
-                    ];
-                    intradaySeries.setData(fallback);
-                    status.innerText = "📊 走勢暫存 (API 繁忙中，顯示日線動態)";
-                } else {
-                    status.innerText = "⚠️ 數據源連線逾時，請稍後重試";
-                }
-            }
-        }
-
-        function calculateSMA(d, c) {
+        function calcMA(d, c) {
             const r = [];
             for (let i = 0; i < d.length; i++) {
                 if (i < c - 1) continue;
@@ -347,16 +285,46 @@
             return r;
         }
 
-        document.getElementById('intraday-range').addEventListener('change', fetchRealtimeSync);
+        async function initStockDatabase() {
+            try {
+                const data = await fetchSafe("https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo");
+                const seen = new Set();
+                allStocks = data.data.filter(s => s.type === 'twse' && !seen.has(s.stock_id) && seen.add(s.stock_id))
+                    .map(s => ({ Code: s.stock_id, Name: s.stock_name, Market: (s.stock_id.startsWith('00')||s.industry_category==='ETF')?'ETF':'上市' }));
+                const list = allStocks.filter(s => top50Codes.includes(s.Code)).sort((a,b) => a.Market==='ETF'?-1:1);
+                renderList(list, true);
+            } catch (e) {}
+            setTimeout(initChart, 100);
+        }
+
+        function renderList(list, isHome = false) {
+            document.getElementById('stock-list').innerHTML = (isHome ? list : list.slice(0,50)).map(s => `
+                <div class="stock-item ${s.Code === currentSymbol ? 'active' : ''}" onclick="selectStock('${s.Code}', '${s.Name}')">
+                    <div style="display:flex; align-items:center;">
+                        <span style="font-size:9px; padding:2px 4px; border-radius:3px; margin-right:8px; background:${s.Market==='ETF'?'#311b92':'#004d40'}; font-weight:bold; width:38px; text-align:center;">${s.Market}</span>
+                        <span style="font-weight:bold;">${s.Code}</span>
+                    </div>
+                    <span style="opacity:0.6; font-size:12px;">${s.Name}</span>
+                </div>`).join('');
+        }
+
         document.getElementById('search-input').addEventListener('input', e => {
             const k = e.target.value.trim().toLowerCase();
-            renderStockList(k === "" ? defaultTop50List : allStocks.filter(s => s.Code.includes(k) || s.Name.includes(k)), k === "");
+            renderList(k === "" ? allStocks.filter(s => top50Codes.includes(s.Code)) : allStocks.filter(s => s.Code.includes(k) || s.Name.includes(k)), k === "");
         });
 
-        initStockDatabase(); setInterval(fetchRealtimeSync, 30000);
-        window.onresize = () => { 
-            if(chart) chart.resize(document.getElementById('main-chart').clientWidth, document.getElementById('main-chart').clientHeight);
-            if(intradayChart) intradayChart.resize(document.getElementById('intraday-chart').clientWidth, document.getElementById('intraday-chart').clientHeight);
+        document.getElementById('intraday-range').addEventListener('change', fetchRealtime);
+        document.querySelectorAll('.ma-toggle').forEach(el => el.onclick = function(){
+            this.classList.toggle('disabled');
+            const s = this.id==='toggle-ma5'?ma5:(this.id==='toggle-ma20'?ma20:ma60);
+            s.applyOptions({ visible: !this.classList.contains('disabled') });
+        });
+
+        initStockDatabase();
+        setInterval(fetchRealtime, 30000);
+        window.onresize = () => {
+            chart.resize(document.getElementById('main-chart').clientWidth, document.getElementById('main-chart').clientHeight);
+            intraChart.resize(document.getElementById('intraday-chart').clientWidth, document.getElementById('intraday-chart').clientHeight);
         };
     </script>
 </body>
